@@ -53,11 +53,14 @@
   .season.winter{background:linear-gradient(90deg,#1c2e4a,#2a2442);border-color:#9fd0ff}
   .cash.gold{background:linear-gradient(90deg,#ffd23c,#ffef9a);animation:pulse .5s infinite}
   #mult.storm{color:#ff9a3c;letter-spacing:4px}
+  .snd{display:flex;gap:6px}
+  .snd button{background:#2c2744;color:var(--text);font-size:16px;padding:6px 10px;border-radius:12px}
+  .snd button.off{opacity:.35;text-decoration:line-through}
   #scene{display:block;width:100%;height:150px;border-radius:14px;margin:10px 0 4px;image-rendering:pixelated;cursor:pointer;background:#231f3a}
 </style>
 </head>
 <body>
-  <div class="row"><h1>KITTY <span>CRASH</span> 🐾</h1><div class="dim" id="count"></div></div>
+  <div class="row"><h1>KITTY <span>CRASH</span> 🐾</h1><div class="row" style="gap:10px"><div class="dim" id="count"></div><div class="snd"><button id="musicBtn" title="music">🎵</button><button id="sfxBtn" title="sounds">🔊</button></div></div></div>
 
   <!-- join -->
   <div id="joinView" class="card" style="display:flex;flex-direction:column;gap:12px">
@@ -138,14 +141,14 @@ document.querySelectorAll(".chip").forEach(b => b.onclick = () => {
 
 $("betBtn").onclick = async () => {
   if(busy) return; busy = true;
-  try{ await api("/api/crowd/bet", {player_id:pid, wager:String(wager)}); $("msg").textContent = "You're riding with kitty! 🐱"; buzz(30); poll(); }
+  try{ await api("/api/crowd/bet", {player_id:pid, wager:String(wager)}); $("msg").textContent = "You're riding with kitty! 🐱"; buzz(30); sfx("bet"); poll(); }
   catch(e){ $("msg").textContent = e.message }
   busy = false;
 };
 
 $("cashBtn").onclick = async () => {
   if(busy) return; busy = true;
-  try{ const j = await api("/api/crowd/cashout", {player_id:pid}); $("msg").textContent = `Cashed out at ${j.multiplier.toFixed(2)}x${j.bonus ? "  (" + BONUS_ICON[j.bonus] + ")" : ""}  +${j.payout.toFixed(0)}`; buzz(j.bonus ? [60,40,60,40,160] : [40,40,80]); poll(); }
+  try{ const j = await api("/api/crowd/cashout", {player_id:pid}); $("msg").textContent = `Cashed out at ${j.multiplier.toFixed(2)}x${j.bonus ? "  (" + BONUS_ICON[j.bonus] + ")" : ""}  +${j.payout.toFixed(0)}`; buzz(j.bonus ? [60,40,60,40,160] : [40,40,80]); sfx("cashout"); if(j.bonus) setTimeout(()=>sfx("bonus"), 250); poll(); }
   catch(e){ $("msg").textContent = e.message }
   busy = false;
 };
@@ -174,6 +177,8 @@ function render(){
   const stage = $("stage");
   stage.classList.toggle("crashed", s.phase==="crashed");
   stage.classList.toggle("won", cashed);
+
+  soundEvents(s, hasBet, cashed);
 
   // phase changes
   if(s.phase !== lastPhase){
@@ -232,6 +237,7 @@ function frame(){
     $("mult").classList.toggle("storm", storm);
     $("mult").textContent = txt;
     $("cashBtn").disabled = warming();
+    frameSounds(m);
     // the cash button tells you when a season bonus is live
     const season = s.rules ? s.rules.season : "";
     const gold = s.phase==="running" && (s.butterfly || (season==="winter" && m >= s.cocoa_line));
@@ -240,6 +246,133 @@ function frame(){
   }
   requestAnimationFrame(frame);
 }
+
+// ───────── sound: same music + effects as the big screen ─────────
+// Files are served from the KittyAPI crowd_assets folder: sfx_<name>.wav, music_<season>.mp3, cat_meow.wav
+const SND = {ctx:null, buf:{}, music:null, current:null,
+  musicOn: localStorage.getItem("kc_music") !== "0", sfxOn: localStorage.getItem("kc_sfx") !== "0"};
+const SFX_LIST = ["bet","cashout","bonus","crash","go","join","reel_land","butterfly","leafstorm","cocoa","zoomies",
+  "d_fish","d_sleep","d_yarn","d_butterfly","d_laser","d_box"];
+const DISTRACTION_SFX = {fish:"d_fish", sleep:"d_sleep", yarn:"d_yarn", butterfly:"d_butterfly", laser:"d_laser", cardboard_box:"d_box"};
+const MUSIC_VOL = 0.35;
+let ev = {phase:"", forecast:"", butterfly:false, storm:false, rushRound:-1, cocoaRound:-1, warming:false, count:-1};
+
+function audioUnlock(){                      // browsers only allow sound after the player taps something
+  if(!SND.ctx){
+    const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
+    SND.ctx = new AC();
+    SFX_LIST.forEach(n => loadSfx("sfx_" + n + ".wav"));
+    loadSfx("cat_meow.wav");
+    if(SND.ctx.state === "suspended") SND.ctx.resume();
+    syncMusic(true);
+    return;
+  }
+  if(SND.ctx.state === "suspended") SND.ctx.resume();
+}
+document.addEventListener("pointerdown", audioUnlock, {passive:true});
+
+function loadSfx(file){
+  if(file in SND.buf) return SND.buf[file];
+  SND.buf[file] = fetch("/crowd-assets/" + file).then(r => r.ok ? r.arrayBuffer() : null)
+    .then(a => a ? new Promise((res, rej) => SND.ctx.decodeAudioData(a, res, rej)) : null)
+    .then(b => (SND.buf[file] = b)).catch(() => (SND.buf[file] = null));
+  return SND.buf[file];
+}
+async function sfx(name, vol = 1, file = null){
+  if(!SND.sfxOn || !SND.ctx) return;
+  const b = await loadSfx(file || ("sfx_" + name + ".wav"));
+  if(!b || !(b instanceof AudioBuffer)) return;
+  const src = SND.ctx.createBufferSource(), g = SND.ctx.createGain();
+  src.buffer = b; g.gain.value = vol * 0.8;
+  src.connect(g); g.connect(SND.ctx.destination); src.start();
+}
+
+function musicEl(){
+  if(SND.music) return SND.music;
+  const a = new Audio(); a.loop = true; a.preload = "auto"; a.setAttribute("playsinline", "");
+  const g = SND.ctx.createGain(); g.gain.value = 0;
+  SND.ctx.createMediaElementSource(a).connect(g); g.connect(SND.ctx.destination);
+  const exts = [".mp3", ".ogg", ".wav"];
+  a.onerror = () => {                          // music_<season>.mp3 missing? try .ogg, then .wav
+    const n = (+a.dataset.try || 0) + 1;
+    if(n < exts.length && a.dataset.season){ a.dataset.try = n; a.src = "/crowd-assets/music_" + a.dataset.season + exts[n]; a.play().catch(() => {}); }
+  };
+  return (SND.music = {a, g});
+}
+function setSrc(m, season){
+  m.a.dataset.season = season; m.a.dataset.try = 0;
+  m.a.src = "/crowd-assets/music_" + season + ".mp3";
+  m.a.play().catch(() => {});
+}
+function fade(m, to, secs){
+  const now = SND.ctx.currentTime;
+  m.g.gain.cancelScheduledValues(now); m.g.gain.setValueAtTime(m.g.gain.value, now); m.g.gain.linearRampToValueAtTime(to, now + secs);
+}
+function musicSeason(){
+  if(!s) return null;
+  if(s.phase === "betting") return s.forecast ? s.forecast.season : SND.current;
+  if(s.phase === "running" || s.phase === "crashed") return s.season || SND.current;
+  return SND.current;
+}
+function syncMusic(firstTap){
+  if(!SND.ctx) return;
+  const m = musicEl();
+  const want = SND.musicOn ? musicSeason() : null;
+  if(firstTap){                                 // iPhones: the player must start inside a tap, so prime it now
+    setSrc(m, want || "spring");
+    if(want){ SND.current = want; fade(m, MUSIC_VOL, 1.5); } else { m.a.pause(); SND.current = null; }
+    return;
+  }
+  if(want === SND.current) return;
+  SND.current = want;
+  const token = SND.switchId = (SND.switchId || 0) + 1;
+  fade(m, 0, 0.7);                              // dip out, swap the track, fade back in
+  setTimeout(() => {
+    if(token !== SND.switchId) return;
+    if(!want){ m.a.pause(); return; }
+    if(m.a.dataset.season !== want) setSrc(m, want); else m.a.play().catch(() => {});
+    fade(m, MUSIC_VOL, 1.2);
+  }, 750);
+}
+function duckMusic(){
+  const m = SND.music; if(!m || !SND.current) return;
+  fade(m, MUSIC_VOL * 0.3, 0.3);
+  setTimeout(() => { if(SND.current) fade(m, MUSIC_VOL, 1.2); }, 2500);
+}
+
+function soundEvents(s, hasBet, cashed){
+  if(ev.count >= 0 && s.player_count > ev.count) sfx("join", 0.7);
+  ev.count = s.player_count;
+  const fc = s.forecast ? s.forecast.season : "";
+  if(s.phase === "betting" && (ev.phase !== "betting" || fc !== ev.forecast) && fc) sfx("reel_land", 0.8);   // season revealed / changed
+  if(s.phase === "crashed" && ev.phase === "running"){
+    sfx("crash", 0.7); sfx(DISTRACTION_SFX[s.distraction] || "d_box", 0.85);
+    setTimeout(() => sfx("meow", 0.8, "cat_meow.wav"), 350); duckMusic();
+  }
+  const running = s.phase === "running";
+  if(running && s.butterfly && !ev.butterfly) sfx("butterfly", 0.9);
+  if(running && s.leaf_storm && !ev.storm) sfx("leafstorm", 0.8);
+  if(running && s.rush && !warming() && ev.rushRound !== s.round_no){ ev.rushRound = s.round_no; sfx("zoomies", 0.9); }
+  ev.butterfly = running && s.butterfly; ev.storm = running && s.leaf_storm;
+  ev.phase = s.phase; ev.forecast = fc;
+  syncMusic();
+}
+function frameSounds(m){
+  const w = !!warming();
+  if(ev.warming && !w && s.phase === "running") sfx("go", 0.7);
+  ev.warming = w;
+  const me = s.you || {};
+  if(s.phase === "running" && s.rules && s.rules.season === "winter" && m >= s.cocoa_line && me.bet > 0 && !(me.cashed_at > 0) && ev.cocoaRound !== s.round_no){
+    ev.cocoaRound = s.round_no; sfx("cocoa", 0.9);
+  }
+}
+
+function paintSoundButtons(){
+  $("musicBtn").classList.toggle("off", !SND.musicOn); $("sfxBtn").classList.toggle("off", !SND.sfxOn);
+}
+$("musicBtn").onclick = () => { SND.musicOn = !SND.musicOn; localStorage.setItem("kc_music", SND.musicOn ? "1" : "0"); paintSoundButtons(); audioUnlock(); syncMusic(); };
+$("sfxBtn").onclick = () => { SND.sfxOn = !SND.sfxOn; localStorage.setItem("kc_sfx", SND.sfxOn ? "1" : "0"); paintSoundButtons(); audioUnlock(); };
+paintSoundButtons();
 
 // ───────── the mini cat scene ─────────
 // Sprite sheets: one row per animation, 120x64 frames (same art as the big screen).
