@@ -1,4 +1,3 @@
-
 import math
 import threading
 
@@ -25,11 +24,18 @@ from economy import (
 )
 
 from database.session_repository import from_cents
+from season_rules import (
+    plan as plan_season_events,
+    live as season_live,
+    apply_bonus as season_bonus,
+)
 
 
 class RoundManager:
-    def __init__(self, clock=monotonic, session_store=None):
+    def __init__(self, clock=monotonic, session_store=None, season_rules=False):
         self._session_store = session_store
+        # Four Seasons, Four Rules (season_rules.py). Off by default so plain tests keep the classic math.
+        self._season_rules = season_rules
         self.sessions = {}
         self.rounds = {}
         self._lock = threading.RLock()
@@ -74,6 +80,29 @@ class RoundManager:
             "session_id": session_id,
             "balance": str(INITIAL_BALANCE),
         }
+
+    # SEASON FORECAST
+
+    def peek_next_season(self, session_id: str) -> str:
+        """The season of this session's NEXT walk, decided before betting so players can plan for it."""
+        with self._lock:
+            session = self._session(session_id)
+            if session.get("next_season") is None:
+                session["next_season"] = select_season()
+            return session["next_season"]
+
+    def set_next_season(self, session_id: str, season: str | None = None) -> str:
+        """Host control (key N on the game screen): choose the next walk's season, or cycle to the next one."""
+        order = ("spring", "summer", "fall", "winter")
+        with self._lock:
+            session = self._session(session_id)
+            if season is None:
+                current = session.get("next_season") or select_season()
+                season = order[(order.index(current) + 1) % 4] if current in order else order[0]
+            elif season not in order:
+                raise ValueError(f"Unknown season: {season}")
+            session["next_season"] = season
+            return season
 
     # ROUND OWNERSHIP AND RECOVERY
 
@@ -206,8 +235,11 @@ class RoundManager:
                 session_id, wager
             )
 
-        season = select_season()
+        with self._lock:
+            # use the forecast players saw while betting (or roll one now)
+            season = self._session(session_id).pop("next_season", None) or select_season()
         growth_rate, rush = season_growth_rate(season, mode=rng_mode)
+        events = plan_season_events(season, MIN_CRASH_SECONDS) if self._season_rules else None
         crash_point = generate_crash_point(mode=rng_mode)
         crash_time = crash_after_seconds(crash_point, growth_rate=growth_rate, lead_in_seconds=MIN_CRASH_SECONDS)
         distraction = select_distraction(season)
@@ -249,6 +281,7 @@ class RoundManager:
                 "growth_rate": growth_rate,
                 "rush": rush,
                 "lead_in_seconds": MIN_CRASH_SECONDS,
+                "events": events,
             }
 
             self.rounds[round_id] = round_data
@@ -280,6 +313,7 @@ class RoundManager:
                     else "crashed"
                 ),
                 "warmup_seconds": MIN_CRASH_SECONDS,
+                "growth_rate": growth_rate,
                 "can_cashout": False,
             }
 
@@ -328,6 +362,8 @@ class RoundManager:
                     "can_cashout": phase == "active",
                     "multiplier": displayed,
                     "distraction": None,
+                    # live season events: golden butterfly (spring), leaf storm (fall)
+                    **(season_live(round_data["events"], elapsed) if round_data.get("events") is not None else {}),
                 }
 
             if status == "crashed":
@@ -359,6 +395,31 @@ class RoundManager:
                 "payout": str(
                     round_data["payout"]
                 ),
+            }
+
+    # SEASON SCHEDULE (for the game screen)
+
+    def get_round_season(
+        self,
+        session_id: str,
+        round_id: str,
+    ) -> dict:
+        """This walk's season and event schedule (seconds since start), so the game screen can show
+        the golden butterfly / leaf storms in perfect sync. Events never depend on the crash point."""
+        with self._lock:
+            round_data = self._owned_round(session_id, round_id)
+            events = round_data.get("events") or {}
+            butterfly = events.get("butterfly") or []
+            storms = [t for w in events.get("leaf_storms") or [] for t in w]
+            return {
+                "round_id": round_id,
+                "season": round_data.get("season"),
+                "rush": bool(round_data.get("rush")),
+                "growth_rate": round_data.get("growth_rate"),
+                "lead_in_seconds": round_data.get("lead_in_seconds"),
+                "rules_on": round_data.get("events") is not None,
+                "butterfly": list(butterfly),
+                "leaf_storms": storms,
             }
 
     # CASH OUT
@@ -408,6 +469,11 @@ class RoundManager:
 
             current = multiplier_at(elapsed, growth_rate=round_data["growth_rate"], lead_in_seconds=round_data["lead_in_seconds"])
             cashout_multiplier = math.floor(current * 100) / 100
+            base_multiplier = cashout_multiplier
+            # season bonus (butterfly +25% / cocoa +10%) is paid as a higher multiplier
+            cashout_multiplier, bonus = season_bonus(
+                round_data["season"], round_data.get("events"), elapsed, base_multiplier
+            )
             payout = calculate_cashout(round_data["wager"], cashout_multiplier,)
             if self._session_store is not None:
                 new_balance = self._session_store.settle_round(
@@ -431,13 +497,18 @@ class RoundManager:
                 "cashout_multiplier"
             ] = cashout_multiplier
             round_data["payout"] = payout
+            round_data["bonus"] = bonus
 
-            return {
+            result = {
                 "status": "cashed_out",
                 "multiplier": cashout_multiplier,
                 "payout": str(payout),
                 "balance": str(new_balance),
             }
+            if round_data.get("events") is not None:
+                result["base_multiplier"] = base_multiplier
+                result["bonus"] = bonus
+            return result
 
     # PLAYER BALANCE
 

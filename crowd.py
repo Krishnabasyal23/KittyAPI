@@ -27,10 +27,12 @@ from pydantic import BaseModel, Field
 
 from crash_engine import SEASON_GROWTH, MIN_CRASH_SECONDS, multiplier_at
 from economy import MIN_BET, MAX_BET, calculate_cashout
+from season_rules import describe as describe_season, live as season_live, apply_bonus as season_bonus, COCOA_LINE
 
 START_CREDITS = Decimal("1000.00")
 MAX_PLAYERS = 60
 HTML_FILE = Path(__file__).resolve().parent / "crowd.html"
+ASSET_DIR = Path(__file__).resolve().parent / "crowd_assets"   # cat1.png ... cat6.png (the phone's cat)
 
 
 def _lan_ip() -> str:
@@ -81,12 +83,15 @@ class CrowdTable:
         self.round_no = 0
         self.join_url = None
         self.history = []
+        self.forecast = None        # season of the next walk (players see it while betting)
+        self.host_name = "PC Player"  # the person playing on the big screen (shown on the leaderboard)
 
     # ---------- host (the Unity game) ----------
 
-    def set_host(self, session_id: str, port: int) -> dict:
+    def set_host(self, session_id: str, port: int, name: str = "") -> dict:
         with self.lock:
             self.host_session = session_id
+            self.host_name = " ".join((name or "").split())[:16] or "PC Player"
             public = os.getenv("PUBLIC_URL", "").strip().rstrip("/")
             self.join_url = (public or f"http://{_lan_ip()}:{port}") + "/crowd"
             return {"join_url": self.join_url, "qr": _qr_rows(self.join_url)}
@@ -103,7 +108,9 @@ class CrowdTable:
                     p["bet"] = None
                     p["cashed_at"] = None
                     p["payout"] = None
+                    p["bonus"] = None
                 self.round = None
+            self._peek_forecast()
             self.phase = "betting"
             self.closes_at = self.clock() + max(1.0, min(float(seconds), 60.0))
             return {"phase": self.phase}
@@ -142,7 +149,7 @@ class CrowdTable:
             self.players[pid] = {
                 "name": name, "balance": START_CREDITS,
                 "bet": None, "cashed_at": None, "payout": None,
-                "best": 0.0,
+                "best": 0.0, "bonus": None,
             }
             return {"player_id": pid, "name": name, "balance": float(START_CREDITS)}
 
@@ -183,13 +190,40 @@ class CrowdTable:
             elapsed = self.clock() - self.round["start_time"]
             if elapsed < (self.round.get("lead_in_seconds") or 0.0):
                 raise HTTPException(status_code=400, detail="Kitty is still stretching - wait for the walk!")
-            m = _round_multiplier(self.round, elapsed)
+            base = _round_multiplier(self.round, elapsed)
+            m, bonus = season_bonus(self.round.get("season") or "", self.round.get("events"), elapsed, base)
             payout = calculate_cashout(p["bet"], m)
+            p["bonus"] = bonus
             p["cashed_at"] = m
             p["payout"] = payout
             p["balance"] += payout
             p["best"] = max(p["best"], m)
-            return {"multiplier": m, "payout": float(payout), "balance": float(p["balance"])}
+            return {"multiplier": m, "base_multiplier": base, "bonus": bonus,
+                    "payout": float(payout), "balance": float(p["balance"])}
+
+    # ---------- the big-screen player ----------
+
+    def _peek_forecast(self):
+        if not self.host_session:
+            return self.forecast
+        try:
+            self.forecast = self.manager.peek_next_season(self.host_session)
+        except (KeyError, AttributeError):
+            pass
+        return self.forecast
+
+    def _host_rider(self):
+        if not self.host_session or self.round is None or self.phase not in ("running", "crashed"):
+            return None
+        return _rider_from_round(self.host_name, self.round, self.phase)
+
+    def _host_balance(self):
+        if not self.host_session:
+            return None
+        try:
+            return float(self.manager.get_balance(self.host_session)["balance"])
+        except (KeyError, ValueError, AttributeError):
+            return None
 
     # ---------- shared clock ----------
 
@@ -221,7 +255,16 @@ class CrowdTable:
                 "distraction": "",
                 "join_url": self.join_url or "",
                 "history": self.history,
+                "forecast": describe_season(self.forecast) if self.forecast and self.phase == "betting" else None,
+                "rules": None,
+                "butterfly": False,
+                "leaf_storm": False,
+                "cocoa_line": COCOA_LINE,
             }
+            if self.phase == "betting":
+                # live: if the game screen changes next walk's season (key N), phones see it at once
+                fc = self._peek_forecast()
+                data["forecast"] = describe_season(fc) if fc else None
             if self.round is not None and self.phase in ("running", "crashed"):
                 elapsed = now - self.round["start_time"]
                 data["elapsed"] = max(0.0, elapsed)
@@ -229,7 +272,9 @@ class CrowdTable:
                 data["warmup"] = self.round.get("lead_in_seconds") or 0.0
                 data["season"] = self.round.get("season") or ""
                 data["rush"] = bool(self.round.get("rush"))
+                data["rules"] = describe_season(data["season"])
                 if self.phase == "running":
+                    data.update(season_live(self.round.get("events"), elapsed))
                     data["multiplier"] = _round_multiplier(self.round, elapsed)
                 else:
                     data["multiplier"] = data["crash_point"] = round(self.round["crash_point"], 2)
@@ -249,13 +294,21 @@ class CrowdTable:
                     "name": p["name"], "bet": _money(p["bet"]),
                     "cashed_at": p["cashed_at"] or 0.0,
                     "payout": _money(p["payout"]), "status": status,
+                    "bonus": p.get("bonus") or "",
                 })
+            host = self._host_rider()
+            if host:
+                riders.append(host)
             riders.sort(key=lambda r: -r["bet"])
             data["players"] = riders
             data["player_count"] = len(self.players)
 
-            board = sorted(self.players.values(), key=lambda p: p["balance"], reverse=True)[:5]
-            data["leaderboard"] = [{"name": p["name"], "balance": float(p["balance"]), "best": p["best"]} for p in board]
+            board = [{"name": p["name"], "balance": float(p["balance"]), "best": p["best"], "host": False} for p in self.players.values()]
+            hb = self._host_balance()
+            if hb is not None:
+                board.append({"name": self.host_name, "balance": hb, "best": 0.0, "host": True})
+            board.sort(key=lambda p: p["balance"], reverse=True)
+            data["leaderboard"] = board[:5]
 
             if pid:
                 p = self.players.get(pid)
@@ -264,13 +317,28 @@ class CrowdTable:
                         "name": p["name"], "balance": float(p["balance"]),
                         "bet": _money(p["bet"]), "cashed_at": p["cashed_at"] or 0.0,
                         "payout": _money(p["payout"]),
+                        "bonus": p.get("bonus") or "",
                     }
                 else:
                     data["you"] = None
             return data
 
 
+def _rider_from_round(name: str, rd: dict, phase: str) -> dict:
+    """The big-screen player as a rider, from their real server round."""
+    if rd.get("status") == "cashed_out":
+        return {"name": name, "bet": _money(rd.get("wager")), "cashed_at": rd.get("cashout_multiplier") or 0.0,
+                "payout": _money(rd.get("payout")), "status": "cashed", "bonus": rd.get("bonus") or "", "host": True}
+    burned = phase == "crashed" or rd.get("status") == "crashed"
+    return {"name": name, "bet": _money(rd.get("wager")), "cashed_at": 0.0, "payout": 0.0,
+            "status": "burned" if burned else "riding", "bonus": "", "host": True}
+
+
 # ---------- HTTP routes ----------
+
+class HostBody(BaseModel):
+    name: str = Field("", max_length=40)
+
 
 class OpenBody(BaseModel):
     seconds: float = Field(8.0, ge=0, le=120)
@@ -295,17 +363,17 @@ def make_router(table: CrowdTable) -> APIRouter:
     @r.get("/crowd", response_class=HTMLResponse, include_in_schema=False)
     def crowd_page():
         return HTMLResponse(HTML_FILE.read_text(encoding="utf-8"), headers={"Cache-Control": "no-store"})
+
     @r.get("/crowd-assets/{name}", include_in_schema=False)
-    
     def crowd_asset(name: str):
-        path = Path(__file__).resolve().parent / "crowd_assets" / name
+        path = ASSET_DIR / name
         if "/" in name or "\\" in name or ".." in name or not path.is_file():
             raise HTTPException(status_code=404, detail="Not found")
         return FileResponse(path, headers={"Cache-Control": "max-age=3600"})
-    
+
     @r.post("/api/crowd/host")
-    def host(request: Request, session_id: str = Header(alias="X-Session-ID")):
-        return table.set_host(session_id, request.url.port or 8000)
+    def host(request: Request, body: HostBody | None = None, session_id: str = Header(alias="X-Session-ID")):
+        return table.set_host(session_id, request.url.port or 8000, body.name if body else "")
 
     @r.post("/api/crowd/open")
     def open_betting(body: OpenBody, session_id: str = Header(alias="X-Session-ID")):

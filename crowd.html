@@ -43,6 +43,16 @@
   .pill.hi{color:var(--green)} .pill.lo{color:var(--red)}
   .hidden{display:none!important}
   .bal{font-size:20px;font-weight:600}
+  .season{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:14px;margin:6px 0 8px;background:#2a2442;border:1px solid var(--line)}
+  .season .ico{font-size:30px;line-height:1}
+  .season b{display:block;font-size:17px;letter-spacing:.3px}
+  .season span{display:block;font-size:14px;color:var(--dim);line-height:1.25}
+  .season.spring{background:linear-gradient(90deg,#3a2c4a,#2a2442);border-color:#ff9fd0}
+  .season.summer{background:linear-gradient(90deg,#4a3a1c,#2a2442);border-color:#ffd23c}
+  .season.fall{background:linear-gradient(90deg,#4a2a1c,#2a2442);border-color:#ff8a3c}
+  .season.winter{background:linear-gradient(90deg,#1c2e4a,#2a2442);border-color:#9fd0ff}
+  .cash.gold{background:linear-gradient(90deg,#ffd23c,#ffef9a);animation:pulse .5s infinite}
+  #mult.storm{color:#ff9a3c;letter-spacing:4px}
   #scene{display:block;width:100%;height:150px;border-radius:14px;margin:10px 0 4px;image-rendering:pixelated;cursor:pointer;background:#231f3a}
 </style>
 </head>
@@ -62,6 +72,7 @@
     <div class="card" id="stage">
       <div class="row"><div class="dim" id="me"></div><div class="bal" id="bal"></div></div>
       <canvas id="scene"></canvas>
+      <div id="season" class="season hidden"><div class="ico" id="seasonIco"></div><div><b id="seasonTitle"></b><span id="seasonRule"></span></div></div>
       <div id="mult">1.00x</div>
       <div id="phaseText">Connecting…</div>
       <div class="hist" id="hist" style="margin-top:10px"></div>
@@ -94,6 +105,10 @@
 const $ = id => document.getElementById(id);
 let pid = localStorage.getItem("kc_pid") || "";
 let wager = 50, s = null, recvAt = 0, lastPhase = "", busy = false, lastRound = -1;
+
+const SEASON_ICON = {spring:"🌸", summer:"☀️", fall:"🍂", winter:"❄️"};
+const BONUS_ICON = {butterfly:"🦋 +25%", cocoa:"☕ +10%"};
+let lastButterfly = false;
 
 function esc(t){return String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 function buzz(p){try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}}
@@ -130,7 +145,7 @@ $("betBtn").onclick = async () => {
 
 $("cashBtn").onclick = async () => {
   if(busy) return; busy = true;
-  try{ const j = await api("/api/crowd/cashout", {player_id:pid}); $("msg").textContent = `Cashed out at ${j.multiplier.toFixed(2)}x  +${j.payout.toFixed(0)}`; buzz([40,40,80]); poll(); }
+  try{ const j = await api("/api/crowd/cashout", {player_id:pid}); $("msg").textContent = `Cashed out at ${j.multiplier.toFixed(2)}x${j.bonus ? "  (" + BONUS_ICON[j.bonus] + ")" : ""}  +${j.payout.toFixed(0)}`; buzz(j.bonus ? [60,40,60,40,160] : [40,40,80]); poll(); }
   catch(e){ $("msg").textContent = e.message }
   busy = false;
 };
@@ -178,14 +193,26 @@ function render(){
   else if(s.phase==="running") $("phaseText").textContent = cashed ? `Safe at ${you.cashed_at.toFixed(2)}x 🎉` : warming() ? "Kitty is stretching… get ready!" : hasBet ? (s.rush ? "☀️ SUMMER RUSH! It's climbing fast!" : "Kitty is walking… CASH OUT in time!") : "Watching this walk";
   else if(s.phase==="crashed") $("phaseText").textContent = "Distracted by " + (s.distraction||"something").replace(/_/g," ") + "! Next walk soon";
 
+  // season card: the forecast while betting, the live rule while walking
+  const info = s.phase==="betting" ? s.forecast : (s.phase==="running" || s.phase==="crashed") ? s.rules : null;
+  $("season").classList.toggle("hidden", !info || !info.season);
+  if(info && info.season){
+    $("season").className = "season " + info.season;
+    $("seasonIco").textContent = SEASON_ICON[info.season] || "🐾";
+    $("seasonTitle").textContent = (s.phase==="betting" ? "Next walk: " : "") + info.season.toUpperCase() + " · " + info.title;
+    $("seasonRule").textContent = info.rule;
+  }
+  if(s.butterfly && !lastButterfly && hasBet && !cashed) buzz([30,30,30]);
+  lastButterfly = s.butterfly;
+
   $("hist").innerHTML = (s.history||[]).map(h=>`<span class="pill ${h>=2?"hi":"lo"}">${h.toFixed(2)}x</span>`).join("");
 
   $("riders").textContent = s.players.length ? s.players.length + " riding" : "";
   $("players").innerHTML = s.players.length ? s.players.map(p =>
-    `<div class="item ${p.status} ${p.name===you.name?"me":""}"><span>${esc(p.name)}</span><span>${p.status==="cashed" ? p.cashed_at.toFixed(2)+"x +"+p.payout.toFixed(0) : p.bet.toFixed(0)}</span></div>`).join("")
+    `<div class="item ${p.status} ${p.name===you.name?"me":""}"><span>${p.host ? "🖥 " : ""}${esc(p.name)}</span><span>${p.status==="cashed" ? (p.bonus ? (p.bonus==="butterfly" ? "🦋 " : "☕ ") : "") + p.cashed_at.toFixed(2)+"x +"+p.payout.toFixed(0) : p.bet.toFixed(0)}</span></div>`).join("")
     : `<div class="dim">No bets yet</div>`;
   $("board").innerHTML = s.leaderboard.map((p,i) =>
-    `<div class="item ${p.name===you.name?"me":""}"><span>${["🥇","🥈","🥉","4.","5."][i]} ${esc(p.name)}</span><span>🪙 ${Math.floor(p.balance)}</span></div>`).join("");
+    `<div class="item ${p.name===you.name?"me":""}"><span>${["🥇","🥈","🥉","4.","5."][i]} ${p.host ? "🖥 " : ""}${esc(p.name)}</span><span>🪙 ${Math.floor(p.balance)}</span></div>`).join("");
 }
 
 // time since the walk started, smoothed between polls
@@ -200,8 +227,16 @@ function frame(){
     if(s.phase==="betting") txt = Math.ceil(Math.max(0, s.seconds_left - (performance.now()-recvAt)/1000)) + "s";
     else if(warming()) txt = "🐾 " + Math.ceil(s.warmup - walkTime());
     else txt = m.toFixed(2) + "x";
+    const storm = s.phase==="running" && s.leaf_storm && !warming();
+    if(storm) txt = "?.??x";
+    $("mult").classList.toggle("storm", storm);
     $("mult").textContent = txt;
     $("cashBtn").disabled = warming();
+    // the cash button tells you when a season bonus is live
+    const season = s.rules ? s.rules.season : "";
+    const gold = s.phase==="running" && (s.butterfly || (season==="winter" && m >= s.cocoa_line));
+    $("cashBtn").classList.toggle("gold", gold);
+    $("cashBtn").textContent = s.butterfly ? "CASH OUT 🦋 +25%" : (season==="winter" && m >= s.cocoa_line && s.phase==="running") ? "CASH OUT ☕ +10%" : "CASH OUT";
   }
   requestAnimationFrame(frame);
 }
@@ -249,7 +284,7 @@ function drawScene(now){
   const dt = Math.min(0.1, (now - lastT)/1000); lastT = now;
   cx.imageSmoothingEnabled = false;
 
-  const season = (s && (s.phase==="running" || s.phase==="crashed")) ? (s.season || "") : "";
+  const season = !s ? "" : (s.phase==="running" || s.phase==="crashed") ? (s.season || "") : (s.phase==="betting" && s.forecast) ? s.forecast.season : "";
   const [top, bottom, ground] = SKY[season] || SKY[""];
 
   // speed of the world = how fast the multiplier is climbing
@@ -289,14 +324,33 @@ function drawScene(now){
   const im = sheet(skin);
   if(im.complete && im.naturalWidth) cx.drawImage(im, f*120, row*64, 120, 64, catX, catY, cw, ch);
 
-  // what distracted kitty
+  // season events in the scene
   cx.textAlign = "center"; cx.textBaseline = "middle";
+  if(s && s.phase==="running" && s.butterfly){
+    const bx = catX + cw*0.75 + Math.sin(now/260)*cw*0.25, by = catY + ch*0.1 + Math.sin(now/130)*10*dpr;
+    cx.save(); cx.shadowColor = "#ffd23c"; cx.shadowBlur = 18*dpr;
+    cx.font = `${30*dpr}px system-ui`; cx.fillText("🦋", bx, by); cx.restore();
+    for(let i=0;i<5;i++){ cx.fillStyle = `rgba(255,220,80,${0.8 - i*0.15})`; cx.fillRect(bx - (i+1)*9*dpr, by + Math.sin(now/90 + i)*6*dpr, 3*dpr, 3*dpr); }
+  }
+  if(s && s.phase==="running" && s.leaf_storm){
+    for(let i=0;i<60;i++){
+      const x = (i*97.3 + now*0.35*(1 + (i%5)*0.3)) % (W + 40*dpr) - 20*dpr;
+      const y = (i*53.7 + now*0.08*(1 + (i%3))) % H;
+      cx.fillStyle = ["#ff8a3c","#e8a33a","#c4502a","#ffb35c"][i%4];
+      cx.save(); cx.translate(W - x, y); cx.rotate(now/300 + i); cx.fillRect(-5*dpr, -3*dpr, 10*dpr, 6*dpr); cx.restore();
+    }
+  }
+
   if(s && s.phase==="crashed"){
     const p = PROP[s.distraction] || "❗", bob = Math.sin(now/200)*4*dpr;
     cx.font = `${30*dpr}px system-ui`; cx.fillText(p, catX + cw*0.95, catY + ch*0.25 + bob);
     banner("DISTRACTED!", "#ff5a6a", dpr, W);
   } else if(s && s.phase==="running" && s.you && s.you.cashed_at > 0){
-    banner("SAFE!  " + s.you.cashed_at.toFixed(2) + "x", "#4fe08a", dpr, W);
+    banner("SAFE!  " + s.you.cashed_at.toFixed(2) + "x" + (s.you.bonus==="butterfly" ? " 🦋" : s.you.bonus==="cocoa" ? " ☕" : ""), "#4fe08a", dpr, W);
+  } else if(s && s.phase==="running" && s.butterfly){
+    banner("GOLDEN BUTTERFLY! +25%", "#ffd23c", dpr, W);
+  } else if(s && s.phase==="running" && s.leaf_storm){
+    banner("LEAF STORM! 🍂", "#ff9a3c", dpr, W);
   } else if(s && s.phase==="running" && s.rush && walkTime() >= s.warmup && Math.floor(now/300)%2){
     banner("☀️ SUMMER RUSH", "#ffd23c", dpr, W);
   } else if(s && s.phase==="running" && walkTime() < s.warmup){

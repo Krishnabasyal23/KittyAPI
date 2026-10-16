@@ -4,6 +4,7 @@ import os
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import Annotated
+from unittest import result
 
 from fastapi import (
     FastAPI,
@@ -17,6 +18,8 @@ from pydantic import BaseModel, Field, ConfigDict
 from database.connection import initialize_database
 from database.session_repository import SQLiteSessionStore
 from round_manager import RoundManager
+from crowd import CrowdTable, make_router as make_crowd_router
+from season_rules import describe as describe_season
 
 
 class StartRoundRequest(BaseModel):
@@ -48,8 +51,12 @@ def game_call(method, *args, **kwargs):
 store = SQLiteSessionStore()
 
 manager = RoundManager(
-    session_store=store
+    session_store=store,
+    season_rules=True,
 )
+
+# Crowd mode: phones in the room bet on the same cat (see crowd.py)
+crowd = CrowdTable(manager)
 
 
 @asynccontextmanager
@@ -104,6 +111,7 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-Session-ID"],
 )
 
+app.include_router(make_crowd_router(crowd))
 
 SessionHeader = Annotated[
     str,
@@ -131,12 +139,14 @@ def start_round(
     payload: StartRoundRequest,
     session_id: SessionHeader,
 ):
-    return game_call(
+    result = game_call(
         manager.start_round,
         session_id,
         payload.wager,
         rng_mode=GAME_RNG_MODE,
     )
+    crowd.attach(session_id, result)  # the phones ride this same round
+    return result
 
 
 @app.get("/api/rounds/{round_id}/state")
@@ -206,6 +216,25 @@ def player_transactions(
         limit,
     )
 
+class SeasonPick(BaseModel):
+    season: str | None = None
+
+
+@app.post("/api/season/next")
+def pick_next_season(payload: SeasonPick, session_id: SessionHeader):
+    """Host control (key N on the game screen): choose or cycle the next walk's season."""
+    return game_call(lambda: describe_season(manager.set_next_season(session_id, payload.season)))
+
+@app.get("/api/season/next")
+def next_season(session_id: SessionHeader):
+    """Forecast: the season (and its rule) of this player's next walk."""
+    return game_call(lambda: describe_season(manager.peek_next_season(session_id)))
+
+
+@app.get("/api/rounds/{round_id}/season")
+def round_season(round_id: str, session_id: SessionHeader):
+    """This walk's season + event schedule (golden butterfly, leaf storms) for the game screen."""
+    return game_call(manager.get_round_season, session_id, round_id)
 
 @app.get("/api/leaderboard")
 def leaderboard(
