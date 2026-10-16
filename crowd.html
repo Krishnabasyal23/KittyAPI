@@ -1,508 +1,928 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<meta name="theme-color" content="#14121f">
-<title>CATINO- Crowd</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
-<style>
-  :root{--bg:#14121f;--card:#1f1c30;--line:#2f2a48;--text:#f6f2ff;--dim:#a49cc4;--orange:#ffa62e;--green:#4fe08a;--red:#ff5a6a;--blue:#7cc4ff}
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Fredoka,system-ui,sans-serif;overscroll-behavior:none}
-  body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;padding:14px 16px 20px;gap:12px}
-  h1{margin:0;font-size:22px;font-weight:700;letter-spacing:.5px}
-  h1 span{color:var(--orange)}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px}
-  .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .dim{color:var(--dim);font-size:14px}
-  input{width:100%;font:inherit;font-size:20px;padding:14px;border-radius:14px;border:2px solid var(--line);background:#120f1c;color:var(--text);outline:none}
-  input:focus{border-color:var(--orange)}
-  button{font:inherit;font-weight:700;border:0;border-radius:16px;cursor:pointer;color:#16121f;transition:transform .08s,opacity .2s}
-  button:active{transform:scale(.97)}
-  button:disabled{opacity:.35}
-  .big{width:100%;font-size:24px;padding:18px}
-  .go{background:var(--orange)}
-  .cash{background:var(--green);font-size:30px;padding:26px;box-shadow:0 0 0 0 rgba(79,224,138,.6);animation:pulse 1s infinite}
-  @keyframes pulse{70%{box-shadow:0 0 0 16px rgba(79,224,138,0)}100%{box-shadow:0 0 0 0 rgba(79,224,138,0)}}
-  .chips{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-  .chip{background:#2c2744;color:var(--text);font-size:18px;padding:12px 0}
-  .chip.on{background:var(--orange);color:#16121f}
-  #mult{font-size:64px;font-weight:700;text-align:center;line-height:1;margin:6px 0 2px;font-variant-numeric:tabular-nums}
-  #phaseText{text-align:center;font-size:18px;color:var(--dim);min-height:24px}
-  .crashed #mult{color:var(--red)}
-  .won #mult{color:var(--green)}
-  #msg{text-align:center;min-height:22px;font-size:16px;color:var(--orange)}
-  .list{display:flex;flex-direction:column;gap:6px;max-height:190px;overflow:auto}
-  .item{display:flex;justify-content:space-between;font-size:16px;padding:6px 10px;border-radius:10px;background:#18152a}
-  .item.cashed{color:var(--green)} .item.burned{color:var(--red);text-decoration:line-through;opacity:.8}
-  .item.me{outline:2px solid var(--orange)}
-  .hist{display:flex;gap:6px;overflow:hidden}
-  .pill{font-size:13px;padding:3px 8px;border-radius:99px;background:#2c2744}
-  .pill.hi{color:var(--green)} .pill.lo{color:var(--red)}
-  .hidden{display:none!important}
-  .bal{font-size:20px;font-weight:600}
-  .season{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:14px;margin:6px 0 8px;background:#2a2442;border:1px solid var(--line)}
-  .season .ico{font-size:30px;line-height:1}
-  .season b{display:block;font-size:17px;letter-spacing:.3px}
-  .season span{display:block;font-size:14px;color:var(--dim);line-height:1.25}
-  .season.spring{background:linear-gradient(90deg,#3a2c4a,#2a2442);border-color:#ff9fd0}
-  .season.summer{background:linear-gradient(90deg,#4a3a1c,#2a2442);border-color:#ffd23c}
-  .season.fall{background:linear-gradient(90deg,#4a2a1c,#2a2442);border-color:#ff8a3c}
-  .season.winter{background:linear-gradient(90deg,#1c2e4a,#2a2442);border-color:#9fd0ff}
-  .cash.gold{background:linear-gradient(90deg,#ffd23c,#ffef9a);animation:pulse .5s infinite}
-  #mult.storm{color:#ff9a3c;letter-spacing:4px}
-  .snd{display:flex;gap:6px}
-  .snd button{background:#2c2744;color:var(--text);font-size:16px;padding:6px 10px;border-radius:12px}
-  .snd button.off{opacity:.35;text-decoration:line-through}
-  #scene{display:block;width:100%;height:150px;border-radius:14px;margin:10px 0 4px;image-rendering:pixelated;cursor:pointer;background:#231f3a}
-</style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+    <meta name="theme-color" content="#14121f">
+    <title>CATINO- Crowd</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #14121f;
+            --card: #1f1c30;
+            --line: #2f2a48;
+            --text: #f6f2ff;
+            --dim: #a49cc4;
+            --orange: #ffa62e;
+            --green: #4fe08a;
+            --red: #ff5a6a;
+            --blue: #7cc4ff
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent
+        }
+
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Fredoka, system-ui, sans-serif;
+            overscroll-behavior: none
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 14px 16px 20px;
+            gap: 12px
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: .5px
+        }
+
+        h1 span {
+            color: var(--orange)
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            padding: 14px
+        }
+
+        .row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px
+        }
+
+        .dim {
+            color: var(--dim);
+            font-size: 14px
+        }
+
+        input {
+            width: 100%;
+            font: inherit;
+            font-size: 20px;
+            padding: 14px;
+            border-radius: 14px;
+            border: 2px solid var(--line);
+            background: #120f1c;
+            color: var(--text);
+            outline: none
+        }
+
+        input:focus {
+            border-color: var(--orange)
+        }
+
+        button {
+            font: inherit;
+            font-weight: 700;
+            border: 0;
+            border-radius: 16px;
+            cursor: pointer;
+            color: #16121f;
+            transition: transform .08s, opacity .2s
+        }
+
+        button:active {
+            transform: scale(.97)
+        }
+
+        button:disabled {
+            opacity: .35
+        }
+
+        .big {
+            width: 100%;
+            font-size: 24px;
+            padding: 18px
+        }
+
+        .go {
+            background: var(--orange)
+        }
+
+        .cash {
+            background: var(--green);
+            font-size: 30px;
+            padding: 26px;
+            box-shadow: 0 0 0 0 rgba(79, 224, 138, .6);
+            animation: pulse 1s infinite
+        }
+
+        @keyframes pulse {
+            70% {
+                box-shadow: 0 0 0 16px rgba(79, 224, 138, 0)
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(79, 224, 138, 0)
+            }
+        }
+
+        .chips {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px
+        }
+
+        .chip {
+            background: #2c2744;
+            color: var(--text);
+            font-size: 18px;
+            padding: 12px 0
+        }
+
+        .chip.on {
+            background: var(--orange);
+            color: #16121f
+        }
+
+        #mult {
+            font-size: 64px;
+            font-weight: 700;
+            text-align: center;
+            line-height: 1;
+            margin: 6px 0 2px;
+            font-variant-numeric: tabular-nums
+        }
+
+        #phaseText {
+            text-align: center;
+            font-size: 18px;
+            color: var(--dim);
+            min-height: 24px
+        }
+
+        #mood {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin: 4px 0 2px;
+            min-height: 52px
+        }
+
+        #moodImg {
+            width: 48px;
+            height: 48px;
+            image-rendering: pixelated
+        }
+
+        #mood b {
+            display: block;
+            font-size: 17px
+        }
+
+        #mood span {
+            display: block;
+            font-size: 14px;
+            color: var(--dim);
+            font-variant-numeric: tabular-nums
+        }
+
+        #mood.pop #moodImg {
+            animation: moodpop .35s ease-out
+        }
+
+        #mood[data-mood=anxious] #moodImg,
+        #mood[data-mood=panic] #moodImg {
+            animation: moodshake .25s infinite
+        }
+
+        #mood[data-mood=sad] #moodImg {
+            animation: moodbob 1.6s ease-in-out infinite
+        }
+
+        #mood[data-mood=panic] b {
+            color: var(--red)
+        }
+
+        #mood[data-mood=win] b {
+            color: var(--green)
+        }
+
+        @keyframes moodpop {
+            0% {
+                transform: scale(.5)
+            }
+
+            70% {
+                transform: scale(1.2)
+            }
+
+            100% {
+                transform: scale(1)
+            }
+        }
+
+        @keyframes moodshake {
+            25% {
+                transform: translateX(-2px)
+            }
+
+            75% {
+                transform: translateX(2px)
+            }
+        }
+
+        @keyframes moodbob {
+            50% {
+                transform: translateY(3px)
+            }
+        }
+
+
+        .crashed #mult {
+            color: var(--red)
+        }
+
+        .won #mult {
+            color: var(--green)
+        }
+
+        #msg {
+            text-align: center;
+            min-height: 22px;
+            font-size: 16px;
+            color: var(--orange)
+        }
+
+        .list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 190px;
+            overflow: auto
+        }
+
+        .item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 16px;
+            padding: 6px 10px;
+            border-radius: 10px;
+            background: #18152a
+        }
+
+        .item.cashed {
+            color: var(--green)
+        }
+
+        .item.burned {
+            color: var(--red);
+            text-decoration: line-through;
+            opacity: .8
+        }
+
+        .item.me {
+            outline: 2px solid var(--orange)
+        }
+
+        .hist {
+            display: flex;
+            gap: 6px;
+            overflow: hidden
+        }
+
+        .pill {
+            font-size: 13px;
+            padding: 3px 8px;
+            border-radius: 99px;
+            background: #2c2744
+        }
+
+        .pill.hi {
+            color: var(--green)
+        }
+
+        .pill.lo {
+            color: var(--red)
+        }
+
+        .hidden {
+            display: none !important
+        }
+
+        .bal {
+            font-size: 20px;
+            font-weight: 600
+        }
+
+        .season {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            padding: 10px 12px;
+            border-radius: 14px;
+            margin: 6px 0 8px;
+            background: #2a2442;
+            border: 1px solid var(--line)
+        }
+
+        .season .ico {
+            font-size: 30px;
+            line-height: 1
+        }
+
+        .season b {
+            display: block;
+            font-size: 17px;
+            letter-spacing: .3px
+        }
+
+        .season span {
+            display: block;
+            font-size: 14px;
+            color: var(--dim);
+            line-height: 1.25
+        }
+
+        .season.spring {
+            background: linear-gradient(90deg, #3a2c4a, #2a2442);
+            border-color: #ff9fd0
+        }
+
+        .season.summer {
+            background: linear-gradient(90deg, #4a3a1c, #2a2442);
+            border-color: #ffd23c
+        }
+
+        .season.fall {
+            background: linear-gradient(90deg, #4a2a1c, #2a2442);
+            border-color: #ff8a3c
+        }
+
+        .season.winter {
+            background: linear-gradient(90deg, #1c2e4a, #2a2442);
+            border-color: #9fd0ff
+        }
+
+        .cash.gold {
+            background: linear-gradient(90deg, #ffd23c, #ffef9a);
+            animation: pulse .5s infinite
+        }
+
+        #mult.storm {
+            color: #ff9a3c;
+            letter-spacing: 4px
+        }
+
+        .snd {
+            display: flex;
+            gap: 6px
+        }
+
+        .snd button {
+            background: #2c2744;
+            color: var(--text);
+            font-size: 16px;
+            padding: 6px 10px;
+            border-radius: 12px
+        }
+
+        .snd button.off {
+            opacity: .35;
+            text-decoration: line-through
+        }
+
+        #scene {
+            display: block;
+            width: 100%;
+            height: 150px;
+            border-radius: 14px;
+            margin: 10px 0 4px;
+            image-rendering: pixelated;
+            cursor: pointer;
+            background: #231f3a
+        }
+    </style>
 </head>
+
 <body>
-  <div class="row"><h1>CAT <span>INO</span> 🐾</h1><div class="row" style="gap:10px"><div class="dim" id="count"></div><div class="snd"><button id="musicBtn" title="music">🎵</button><button id="sfxBtn" title="sounds">🔊</button></div></div></div>
-
-  <!-- join -->
-  <div id="joinView" class="card" style="display:flex;flex-direction:column;gap:12px">
-    <div style="font-size:20px">Bet on the cat with everyone in the room. Cash out before kitty gets distracted!</div>
-    <input id="name" maxlength="12" placeholder="Your name" autocomplete="off">
-    <button class="big go" id="joinBtn">JOIN THE GAME</button>
-    <div id="joinErr" class="dim" style="color:var(--red)"></div>
-  </div>
-
-  <!-- game -->
-  <div id="gameView" class="hidden" style="display:flex;flex-direction:column;gap:12px">
-    <div class="card" id="stage">
-      <div class="row"><div class="dim" id="me"></div><div class="bal" id="bal"></div></div>
-      <canvas id="scene"></canvas>
-      <div id="season" class="season hidden"><div class="ico" id="seasonIco"></div><div><b id="seasonTitle"></b><span id="seasonRule"></span></div></div>
-      <div id="mult">1.00x</div>
-      <div id="phaseText">Connecting…</div>
-      <div class="hist" id="hist" style="margin-top:10px"></div>
+    <div class="row">
+        <h1>CAT <span>INO</span> 🐾</h1>
+        <div class="row" style="gap:10px">
+            <div class="dim" id="count"></div>
+            <div class="snd"><button id="musicBtn" title="music">🎵</button><button id="sfxBtn"
+                    title="sounds">🔊</button></div>
+        </div>
     </div>
 
-    <div id="betBox" class="card" style="display:flex;flex-direction:column;gap:10px">
-      <div class="chips">
-        <button class="chip" data-v="10">10</button>
-        <button class="chip on" data-v="50">50</button>
-        <button class="chip" data-v="100">100</button>
-        <button class="chip" data-v="250">250</button>
-      </div>
-      <button class="big go" id="betBtn">BET 50</button>
+    <!-- join -->
+    <div id="joinView" class="card" style="display:flex;flex-direction:column;gap:12px">
+        <div style="font-size:20px">Bet on the cat with everyone in the room. Cash out before kitty gets distracted!
+        </div>
+        <input id="name" maxlength="12" placeholder="Your name" autocomplete="off">
+        <button class="big go" id="joinBtn">JOIN THE GAME</button>
+        <div id="joinErr" class="dim" style="color:var(--red)"></div>
     </div>
 
-    <button class="big cash hidden" id="cashBtn">CASH OUT</button>
-    <div id="msg"></div>
+    <!-- game -->
+    <div id="gameView" class="hidden" style="display:flex;flex-direction:column;gap:12px">
+        <div class="card" id="stage">
+            <div class="row">
+                <div class="dim" id="me"></div>
+                <div class="bal" id="bal"></div>
+            </div>
+            <canvas id="scene"></canvas>
+            <div id="season" class="season hidden">
+                <div class="ico" id="seasonIco"></div>
+                <div><b id="seasonTitle"></b><span id="seasonRule"></span></div>
+            </div>
+            <div id="mult">1.00x</div>
+            <div id="phaseText">Connecting…</div>
+            <div id="mood" data-mood="calm"><img id="moodImg" src="/crowd-assets/mood_calm.png" alt="">
+                <div><b id="moodLabel">Chillin'</b><span id="moodSub"></span></div>
+            </div>
+            <div id="mood" data-mood="calm"><img id="moodImg" src="/crowd-assets/mood_calm.png" alt="">
+                <div><b id="moodLabel">Chillin'</b><span id="moodSub"></span></div>
+            </div>
+            <div class="hist" id="hist" style="margin-top:10px"></div>
+        </div>
 
-    <div class="card">
-      <div class="row" style="margin-bottom:8px"><b>This walk</b><span class="dim" id="riders"></span></div>
-      <div class="list" id="players"></div>
+        <div id="betBox" class="card" style="display:flex;flex-direction:column;gap:10px">
+            <div class="chips">
+                <button class="chip" data-v="10">10</button>
+                <button class="chip on" data-v="50">50</button>
+                <button class="chip" data-v="100">100</button>
+                <button class="chip" data-v="250">250</button>
+            </div>
+            <button class="big go" id="betBtn">BET 50</button>
+        </div>
+
+        <button class="big cash hidden" id="cashBtn">CASH OUT</button>
+        <div id="msg"></div>
+
+        <div class="card">
+            <div class="row" style="margin-bottom:8px"><b>This walk</b><span class="dim" id="riders"></span></div>
+            <div class="list" id="players"></div>
+        </div>
+        <div class="card">
+            <b>Leaderboard</b>
+            <div class="list" id="board" style="margin-top:8px"></div>
+        </div>
     </div>
-    <div class="card">
-      <b>Leaderboard</b>
-      <div class="list" id="board" style="margin-top:8px"></div>
-    </div>
-  </div>
 
-<script>
-const $ = id => document.getElementById(id);
-let pid = localStorage.getItem("kc_pid") || "";
-let wager = 50, s = null, recvAt = 0, lastPhase = "", busy = false, lastRound = -1;
+    <script>
+        const $ = id => document.getElementById(id);
+        let pid = localStorage.getItem("kc_pid") || "";
+        let wager = 50, s = null, recvAt = 0, lastPhase = "", busy = false, lastRound = -1;
 
-const SEASON_ICON = {spring:"🌸", summer:"☀️", fall:"🍂", winter:"❄️"};
-const BONUS_ICON = {butterfly:"🦋 +25%", cocoa:"☕ +10%"};
-let lastButterfly = false;
+        const SEASON_ICON = { spring: "🌸", summer: "☀️", fall: "🍂", winter: "❄️" };
+        const BONUS_ICON = { butterfly: "🦋 +25%", cocoa: "☕ +10%" };
+        let lastButterfly = false;
 
-function esc(t){return String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
-function buzz(p){try{navigator.vibrate&&navigator.vibrate(p)}catch(e){}}
+        function esc(t) { return String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])) }
+        function buzz(p) { try { navigator.vibrate && navigator.vibrate(p) } catch (e) { } }
 
-async function api(path, body){
-  const r = await fetch(path, body===undefined ? {cache:"no-store"} :
-    {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
-  const j = await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(j.detail || "Network problem");
-  return j;
-}
+        async function api(path, body) {
+            const r = await fetch(path, body === undefined ? { cache: "no-store" } :
+                { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(j.detail || "Network problem");
+            return j;
+        }
 
-$("name").value = localStorage.getItem("kc_name") || "";
-$("joinBtn").onclick = async () => {
-  try{
-    const j = await api("/api/crowd/join", {name: $("name").value});
-    pid = j.player_id; localStorage.setItem("kc_pid", pid); localStorage.setItem("kc_name", j.name);
-    show();
-  }catch(e){ $("joinErr").textContent = e.message }
-};
-$("name").addEventListener("keydown", e => { if(e.key==="Enter") $("joinBtn").click() });
+        $("name").value = localStorage.getItem("kc_name") || "";
+        $("joinBtn").onclick = async () => {
+            try {
+                const j = await api("/api/crowd/join", { name: $("name").value });
+                pid = j.player_id; localStorage.setItem("kc_pid", pid); localStorage.setItem("kc_name", j.name);
+                show();
+            } catch (e) { $("joinErr").textContent = e.message }
+        };
+        $("name").addEventListener("keydown", e => { if (e.key === "Enter") $("joinBtn").click() });
 
-document.querySelectorAll(".chip").forEach(b => b.onclick = () => {
-  document.querySelectorAll(".chip").forEach(x=>x.classList.remove("on")); b.classList.add("on");
-  wager = +b.dataset.v; $("betBtn").textContent = "BET " + wager;
-});
+        document.querySelectorAll(".chip").forEach(b => b.onclick = () => {
+            document.querySelectorAll(".chip").forEach(x => x.classList.remove("on")); b.classList.add("on");
+            wager = +b.dataset.v; $("betBtn").textContent = "BET " + wager;
+        });
 
-$("betBtn").onclick = async () => {
-  if(busy) return; busy = true;
-  try{ await api("/api/crowd/bet", {player_id:pid, wager:String(wager)}); $("msg").textContent = "You're riding with kitty! 🐱"; buzz(30); sfx("bet"); poll(); }
-  catch(e){ $("msg").textContent = e.message }
-  busy = false;
-};
+        $("betBtn").onclick = async () => {
+            if (busy) return; busy = true;
+            try { await api("/api/crowd/bet", { player_id: pid, wager: String(wager) }); $("msg").textContent = "You're riding with kitty! 🐱"; buzz(30); sfx("bet"); poll(); }
+            catch (e) { $("msg").textContent = e.message }
+            busy = false;
+        };
 
-$("cashBtn").onclick = async () => {
-  if(busy) return; busy = true;
-  try{ const j = await api("/api/crowd/cashout", {player_id:pid}); $("msg").textContent = `Cashed out at ${j.multiplier.toFixed(2)}x${j.bonus ? "  (" + BONUS_ICON[j.bonus] + ")" : ""}  +${j.payout.toFixed(0)}`; buzz(j.bonus ? [60,40,60,40,160] : [40,40,80]); sfx("cashout"); if(j.bonus) setTimeout(()=>sfx("bonus"), 250); poll(); }
-  catch(e){ $("msg").textContent = e.message }
-  busy = false;
-};
+        $("cashBtn").onclick = async () => {
+            if (busy) return; busy = true;
+            try { const j = await api("/api/crowd/cashout", { player_id: pid }); $("msg").textContent = `Cashed out at ${j.multiplier.toFixed(2)}x${j.bonus ? "  (" + BONUS_ICON[j.bonus] + ")" : ""}  +${j.payout.toFixed(0)}`; buzz(j.bonus ? [60, 40, 60, 40, 160] : [40, 40, 80]); sfx("cashout"); if (j.bonus) setTimeout(() => sfx("bonus"), 250); poll(); }
+            catch (e) { $("msg").textContent = e.message }
+            busy = false;
+        };
 
-function show(){
-  $("joinView").classList.toggle("hidden", !!pid);
-  $("gameView").classList.toggle("hidden", !pid);
-}
+        function show() {
+            $("joinView").classList.toggle("hidden", !!pid);
+            $("gameView").classList.toggle("hidden", !pid);
+        }
 
-async function poll(){
-  try{
-    const j = await api("/api/crowd/state?player_id=" + encodeURIComponent(pid));
-    if(pid && j.you === null){ pid = ""; localStorage.removeItem("kc_pid"); show(); }   // server restarted
-    s = j; recvAt = performance.now(); render();
-  }catch(e){ $("phaseText").textContent = "Can't reach the game - same Wi-Fi?" }
-}
+        async function poll() {
+            try {
+                const j = await api("/api/crowd/state?player_id=" + encodeURIComponent(pid));
+                if (pid && j.you === null) { pid = ""; localStorage.removeItem("kc_pid"); show(); }   // server restarted
+                s = j; recvAt = performance.now(); render();
+            } catch (e) { $("phaseText").textContent = "Can't reach the game - same Wi-Fi?" }
+        }
 
-function render(){
-  if(!s) return;
-  const you = s.you || {bet:0, cashed_at:0, payout:0, balance:0, name:""};
-  const hasBet = you.bet > 0, cashed = you.cashed_at > 0;
-  $("count").textContent = s.player_count + " playing";
-  $("me").textContent = you.name;
-  $("bal").textContent = "🪙 " + Math.floor(you.balance);
+        function render() {
+            if (!s) return;
+            const you = s.you || { bet: 0, cashed_at: 0, payout: 0, balance: 0, name: "" };
+            const hasBet = you.bet > 0, cashed = you.cashed_at > 0;
+            $("count").textContent = s.player_count + " playing";
+            $("me").textContent = you.name;
+            $("bal").textContent = "🪙 " + Math.floor(you.balance);
 
-  const stage = $("stage");
-  stage.classList.toggle("crashed", s.phase==="crashed");
-  stage.classList.toggle("won", cashed);
+            const stage = $("stage");
+            stage.classList.toggle("crashed", s.phase === "crashed");
+            stage.classList.toggle("won", cashed);
 
-  soundEvents(s, hasBet, cashed);
+            soundEvents(s, hasBet, cashed);
 
-  // phase changes
-  if(s.phase !== lastPhase){
-    if(s.phase==="crashed" && hasBet && !cashed){ $("msg").textContent = "Kitty got distracted… you lost " + you.bet.toFixed(0); buzz(300); }
-    if(s.phase==="betting") $("msg").textContent = "";
-    if(s.phase==="crashed") crashAt = performance.now();
-    lastPhase = s.phase;
-  }
+            // phase changes
+            if (s.phase !== lastPhase) {
+                if (s.phase === "crashed" && hasBet && !cashed) { $("msg").textContent = "Kitty got distracted… you lost " + you.bet.toFixed(0); buzz(300); }
+                if (s.phase === "betting") $("msg").textContent = "";
+                if (s.phase === "crashed") crashAt = performance.now();
+                lastPhase = s.phase;
+            }
 
-  $("betBox").classList.toggle("hidden", !(s.phase==="betting" || s.phase==="waiting" || s.phase==="crashed") || (s.phase==="betting" && hasBet));
-  $("betBtn").disabled = s.phase !== "betting";
-  $("cashBtn").classList.toggle("hidden", !(s.phase==="running" && hasBet && !cashed));
-  $("cashBtn").disabled = warming();
+            $("betBox").classList.toggle("hidden", !(s.phase === "betting" || s.phase === "waiting" || s.phase === "crashed") || (s.phase === "betting" && hasBet));
+            $("betBtn").disabled = s.phase !== "betting";
+            $("cashBtn").classList.toggle("hidden", !(s.phase === "running" && hasBet && !cashed));
+            $("cashBtn").disabled = warming();
 
-  if(s.phase==="waiting") $("phaseText").textContent = "Waiting for the game screen…";
-  else if(s.phase==="betting") $("phaseText").textContent = hasBet ? `You bet ${you.bet.toFixed(0)} - kitty leaves soon` : "Place your bet!";
-  else if(s.phase==="running") $("phaseText").textContent = cashed ? `Safe at ${you.cashed_at.toFixed(2)}x 🎉` : warming() ? "Kitty is stretching… get ready!" : hasBet ? (s.rush ? "☀️ SUMMER RUSH! It's climbing fast!" : "Kitty is walking… CASH OUT in time!") : "Watching this walk";
-  else if(s.phase==="crashed") $("phaseText").textContent = "Distracted by " + (s.distraction||"something").replace(/_/g," ") + "! Next walk soon";
+            if (s.phase === "waiting") $("phaseText").textContent = "Waiting for the game screen…";
+            else if (s.phase === "betting") $("phaseText").textContent = hasBet ? `You bet ${you.bet.toFixed(0)} - kitty leaves soon` : "Place your bet!";
+            else if (s.phase === "running") $("phaseText").textContent = cashed ? `Safe at ${you.cashed_at.toFixed(2)}x 🎉` : warming() ? "Kitty is stretching… get ready!" : hasBet ? (s.rush ? "☀️ SUMMER RUSH! It's climbing fast!" : "Kitty is walking… CASH OUT in time!") : "Watching this walk";
+            else if (s.phase === "crashed") $("phaseText").textContent = "Distracted by " + (s.distraction || "something").replace(/_/g, " ") + "! Next walk soon";
 
-  // season card: the forecast while betting, the live rule while walking
-  const info = s.phase==="betting" ? s.forecast : (s.phase==="running" || s.phase==="crashed") ? s.rules : null;
-  $("season").classList.toggle("hidden", !info || !info.season);
-  if(info && info.season){
-    $("season").className = "season " + info.season;
-    $("seasonIco").textContent = SEASON_ICON[info.season] || "🐾";
-    $("seasonTitle").textContent = (s.phase==="betting" ? "Next walk: " : "") + info.season.toUpperCase() + " · " + info.title;
-    $("seasonRule").textContent = info.rule;
-  }
-  if(s.butterfly && !lastButterfly && hasBet && !cashed) buzz([30,30,30]);
-  lastButterfly = s.butterfly;
+            // season card: the forecast while betting, the live rule while walking
+            const info = s.phase === "betting" ? s.forecast : (s.phase === "running" || s.phase === "crashed") ? s.rules : null;
+            $("season").classList.toggle("hidden", !info || !info.season);
+            if (info && info.season) {
+                $("season").className = "season " + info.season;
+                $("seasonIco").textContent = SEASON_ICON[info.season] || "🐾";
+                $("seasonTitle").textContent = (s.phase === "betting" ? "Next walk: " : "") + info.season.toUpperCase() + " · " + info.title;
+                $("seasonRule").textContent = info.rule;
+            }
+            if (s.butterfly && !lastButterfly && hasBet && !cashed) buzz([30, 30, 30]);
+            lastButterfly = s.butterfly;
 
-  $("hist").innerHTML = (s.history||[]).map(h=>`<span class="pill ${h>=2?"hi":"lo"}">${h.toFixed(2)}x</span>`).join("");
+            $("hist").innerHTML = (s.history || []).map(h => `<span class="pill ${h >= 2 ? "hi" : "lo"}">${h.toFixed(2)}x</span>`).join("");
 
-  $("riders").textContent = s.players.length ? s.players.length + " riding" : "";
-  $("players").innerHTML = s.players.length ? s.players.map(p =>
-    `<div class="item ${p.status} ${p.name===you.name?"me":""}"><span>${p.host ? "🖥 " : ""}${esc(p.name)}</span><span>${p.status==="cashed" ? (p.bonus ? (p.bonus==="butterfly" ? "🦋 " : "☕ ") : "") + p.cashed_at.toFixed(2)+"x +"+p.payout.toFixed(0) : p.bet.toFixed(0)}</span></div>`).join("")
-    : `<div class="dim">No bets yet</div>`;
-  $("board").innerHTML = s.leaderboard.map((p,i) =>
-    `<div class="item ${p.name===you.name?"me":""}"><span>${["🥇","🥈","🥉","4.","5."][i]} ${p.host ? "🖥 " : ""}${esc(p.name)}</span><span>🪙 ${Math.floor(p.balance)}</span></div>`).join("");
-}
+            $("riders").textContent = s.players.length ? s.players.length + " riding" : "";
+            $("players").innerHTML = s.players.length ? s.players.map(p =>
+                `<div class="item ${p.status} ${p.name === you.name ? "me" : ""}"><span>${p.host ? "🖥 " : ""}${esc(p.name)}</span><span>${p.status === "cashed" ? (p.bonus ? (p.bonus === "butterfly" ? "🦋 " : "☕ ") : "") + p.cashed_at.toFixed(2) + "x +" + p.payout.toFixed(0) : p.bet.toFixed(0)}</span></div>`).join("")
+                : `<div class="dim">No bets yet</div>`;
+            $("board").innerHTML = s.leaderboard.map((p, i) =>
+                `<div class="item ${p.name === you.name ? "me" : ""}"><span>${["🥇", "🥈", "🥉", "4.", "5."][i]} ${p.host ? "🖥 " : ""}${esc(p.name)}</span><span>🪙 ${Math.floor(p.balance)}</span></div>`).join("");
+        }
 
-// time since the walk started, smoothed between polls
-function walkTime(){ return s.elapsed + (performance.now()-recvAt)/1000; }
-function warming(){ return s && s.phase==="running" && walkTime() < s.warmup; }
+        // time since the walk started, smoothed between polls
+        function walkTime() { return s.elapsed + (performance.now() - recvAt) / 1000; }
+        function warming() { return s && s.phase === "running" && walkTime() < s.warmup; }
 
-// smooth multiplier between polls (same formula as the server: m = e^(growth * (t - warm-up)))
-function frame(){
-  if(s){
-    let m = s.multiplier, txt;
-    if(s.phase==="running"){ m = Math.floor(Math.exp(s.growth_rate*Math.max(0, walkTime()-s.warmup))*100)/100; }
-    if(s.phase==="betting") txt = Math.ceil(Math.max(0, s.seconds_left - (performance.now()-recvAt)/1000)) + "s";
-    else if(warming()) txt = "🐾 " + Math.ceil(s.warmup - walkTime());
-    else txt = m.toFixed(2) + "x";
-    const storm = s.phase==="running" && s.leaf_storm && !warming();
-    if(storm) txt = "?.??x";
-    $("mult").classList.toggle("storm", storm);
-    $("mult").textContent = txt;
-    $("cashBtn").disabled = warming();
-    frameSounds(m);
-    // the cash button tells you when a season bonus is live
-    const season = s.rules ? s.rules.season : "";
-    const gold = s.phase==="running" && (s.butterfly || (season==="winter" && m >= s.cocoa_line));
-    $("cashBtn").classList.toggle("gold", gold);
-    $("cashBtn").textContent = s.butterfly ? "CASH OUT 🦋 +25%" : (season==="winter" && m >= s.cocoa_line && s.phase==="running") ? "CASH OUT ☕ +10%" : "CASH OUT";
-  }
-  requestAnimationFrame(frame);
-}
+        // smooth multiplier between polls (same formula as the server: m = e^(growth * (t - warm-up)))
+        function frame() {
+            if (s) {
+                let m = s.multiplier, txt;
+                if (s.phase === "running") { m = Math.floor(Math.exp(s.growth_rate * Math.max(0, walkTime() - s.warmup)) * 100) / 100; }
+                if (s.phase === "betting") txt = Math.ceil(Math.max(0, s.seconds_left - (performance.now() - recvAt) / 1000)) + "s";
+                else if (warming()) txt = "🐾 " + Math.ceil(s.warmup - walkTime());
+                else txt = m.toFixed(2) + "x";
+                const storm = s.phase === "running" && s.leaf_storm && !warming();
+                if (storm) txt = "?.??x";
+                $("mult").classList.toggle("storm", storm);
+                $("mult").textContent = txt;
+                $("cashBtn").disabled = warming();
+                frameSounds(m);
+                moodUpdate(m, storm);
+                // the cash button tells you when a season bonus is live
+                const season = s.rules ? s.rules.season : "";
+                const gold = s.phase === "running" && (s.butterfly || (season === "winter" && m >= s.cocoa_line));
+                $("cashBtn").classList.toggle("gold", gold);
+                $("cashBtn").textContent = s.butterfly ? "CASH OUT 🦋 +25%" : (season === "winter" && m >= s.cocoa_line && s.phase === "running") ? "CASH OUT ☕ +10%" : "CASH OUT";
+            }
+            requestAnimationFrame(frame);
+        }
 
-// ───────── sound: same music + effects as the big screen ─────────
-// Files are served from the KittyAPI crowd_assets folder: sfx_<name>.wav, music_<season>.mp3, cat_meow.wav
-const SND = {ctx:null, buf:{}, music:null, current:null,
-  musicOn: localStorage.getItem("kc_music") !== "0", sfxOn: localStorage.getItem("kc_sfx") !== "0"};
-const SFX_LIST = ["bet","cashout","bonus","crash","go","join","reel_land","butterfly","leafstorm","cocoa","zoomies",
-  "d_fish","d_sleep","d_yarn","d_butterfly","d_laser","d_box"];
-const DISTRACTION_SFX = {fish:"d_fish", sleep:"d_sleep", yarn:"d_yarn", butterfly:"d_butterfly", laser:"d_laser", cardboard_box:"d_box"};
-const MUSIC_VOL = 0.35;
-let ev = {phase:"", forecast:"", butterfly:false, storm:false, rushRound:-1, cocoaRound:-1, warming:false, count:-1};
+        // ───────── kitty's mood face (same moods and rules as the big screen) ─────────
+        const MOOD_LABEL = {
+            calm: "Chillin'", happy: "Feeling good", excited: "Ooh, climbing!", nervous: "Getting nervous...",
+            anxious: "Cash out?!", panic: "PANIC!!", win: "YESSS!", relieved: "Phew, banked it", sad: "Nooo...", surprised: "Whoa!"
+        };
+        const moodState = { mood: "", cashedRound: -1, winUntil: 0 };
+        function moodUpdate(m, storm) {
+            const you = s.you || { bet: 0, cashed_at: 0, payout: 0 };
+            const hasBet = you.bet > 0, cashed = you.cashed_at > 0, now = performance.now();
+            if (cashed && moodState.cashedRound !== s.round_no) { moodState.cashedRound = s.round_no; moodState.winUntil = now + 2500; }
+            const won = now < moodState.winUntil;
+            const risk = Math.min(1, Math.max(0, 1 - 0.96 / Math.max(1, m)));
+            const t = risk * (hasBet ? 1 : 0.6);
+            let mood = "calm", label = null, sub = "";
+            if (s.phase === "running") {
+                if (warming()) { mood = hasBet ? "happy" : "calm"; }
+                else if (cashed) { mood = won ? "win" : "relieved"; }
+                else if (!hasBet) { mood = t > 0.45 ? "nervous" : "calm"; label = t > 0.45 ? null : "Just watching"; }
+                else mood = t < 0.15 ? "happy" : t < 0.38 ? "excited" : t < 0.55 ? "nervous" : t < 0.72 ? "anxious" : "panic";
+                if (cashed) sub = "Won " + Math.floor(you.payout);
+                else if (hasBet && !warming() && !storm) sub = `Risk ${Math.round(risk * 100)}% · ${Math.floor(you.bet * m)}`;
+            } else if (s.phase === "crashed") {
+                if (hasBet && !cashed) { mood = "sad"; sub = "Lost " + Math.floor(you.bet); }
+                else if (cashed) { mood = won ? "win" : "relieved"; sub = "Won " + Math.floor(you.payout); }
+                else { mood = "surprised"; sub = "Kitty stopped at " + (s.crash_point || m).toFixed(2) + "x"; }
+            } else if (s.phase === "betting") {
+                mood = hasBet ? "happy" : "calm"; label = hasBet ? "Bet's in!" : null;
+                sub = hasBet ? "Waiting for kitty..." : "Place a bet!";
+            }
+            if (mood !== moodState.mood) {
+                moodState.mood = mood;
+                $("moodImg").src = "/crowd-assets/mood_" + mood + ".png";
+                const box = $("mood"); box.dataset.mood = mood;
+                box.classList.remove("pop"); void box.offsetWidth; box.classList.add("pop");
+            }
+            $("moodLabel").textContent = label || MOOD_LABEL[mood];
+            $("moodSub").textContent = sub;
+        }
+        // ───────── sound: same music + effects as the big screen ─────────
+        // Files are served from the KittyAPI crowd_assets folder: sfx_<name>.wav, music_<season>.mp3, cat_meow.wav
+        const SND = {
+            ctx: null, buf: {}, music: null, current: null,
+            musicOn: localStorage.getItem("kc_music") !== "0", sfxOn: localStorage.getItem("kc_sfx") !== "0"
+        };
+        const SFX_LIST = ["bet", "cashout", "bonus", "crash", "go", "join", "reel_land", "butterfly", "leafstorm", "cocoa", "zoomies",
+            "d_fish", "d_sleep", "d_yarn", "d_butterfly", "d_laser", "d_box"];
+        const DISTRACTION_SFX = { fish: "d_fish", sleep: "d_sleep", yarn: "d_yarn", butterfly: "d_butterfly", laser: "d_laser", cardboard_box: "d_box" };
+        const MUSIC_VOL = 0.35;
+        let ev = { phase: "", forecast: "", butterfly: false, storm: false, rushRound: -1, cocoaRound: -1, warming: false, count: -1 };
 
-function audioUnlock(){                      // browsers only allow sound after the player taps something
-  if(!SND.ctx){
-    const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
-    SND.ctx = new AC();
-    SFX_LIST.forEach(n => loadSfx("sfx_" + n + ".wav"));
-    loadSfx("cat_meow.wav");
-    if(SND.ctx.state === "suspended") SND.ctx.resume();
-    syncMusic(true);
-    return;
-  }
-  if(SND.ctx.state === "suspended") SND.ctx.resume();
-}
-document.addEventListener("pointerdown", audioUnlock, {passive:true});
+        function audioUnlock() {                      // browsers only allow sound after the player taps something
+            if (!SND.ctx) {
+                const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+                SND.ctx = new AC();
+                SFX_LIST.forEach(n => loadSfx("sfx_" + n + ".wav"));
+                loadSfx("cat_meow.wav");
+                if (SND.ctx.state === "suspended") SND.ctx.resume();
+                syncMusic(true);
+                return;
+            }
+            if (SND.ctx.state === "suspended") SND.ctx.resume();
+        }
+        document.addEventListener("pointerdown", audioUnlock, { passive: true });
 
-function loadSfx(file){
-  if(file in SND.buf) return SND.buf[file];
-  SND.buf[file] = fetch("/crowd-assets/" + file).then(r => r.ok ? r.arrayBuffer() : null)
-    .then(a => a ? new Promise((res, rej) => SND.ctx.decodeAudioData(a, res, rej)) : null)
-    .then(b => (SND.buf[file] = b)).catch(() => (SND.buf[file] = null));
-  return SND.buf[file];
-}
-async function sfx(name, vol = 1, file = null){
-  if(!SND.sfxOn || !SND.ctx) return;
-  const b = await loadSfx(file || ("sfx_" + name + ".wav"));
-  if(!b || !(b instanceof AudioBuffer)) return;
-  const src = SND.ctx.createBufferSource(), g = SND.ctx.createGain();
-  src.buffer = b; g.gain.value = vol * 0.8;
-  src.connect(g); g.connect(SND.ctx.destination); src.start();
-}
+        function loadSfx(file) {
+            if (file in SND.buf) return SND.buf[file];
+            SND.buf[file] = fetch("/crowd-assets/" + file).then(r => r.ok ? r.arrayBuffer() : null)
+                .then(a => a ? new Promise((res, rej) => SND.ctx.decodeAudioData(a, res, rej)) : null)
+                .then(b => (SND.buf[file] = b)).catch(() => (SND.buf[file] = null));
+            return SND.buf[file];
+        }
+        async function sfx(name, vol = 1, file = null) {
+            if (!SND.sfxOn || !SND.ctx) return;
+            const b = await loadSfx(file || ("sfx_" + name + ".wav"));
+            if (!b || !(b instanceof AudioBuffer)) return;
+            const src = SND.ctx.createBufferSource(), g = SND.ctx.createGain();
+            src.buffer = b; g.gain.value = vol * 0.8;
+            src.connect(g); g.connect(SND.ctx.destination); src.start();
+        }
 
-function musicEl(){
-  if(SND.music) return SND.music;
-  const a = new Audio(); a.loop = true; a.preload = "auto"; a.setAttribute("playsinline", "");
-  const g = SND.ctx.createGain(); g.gain.value = 0;
-  SND.ctx.createMediaElementSource(a).connect(g); g.connect(SND.ctx.destination);
-  const exts = [".mp3", ".ogg", ".wav"];
-  a.onerror = () => {                          // music_<season>.mp3 missing? try .ogg, then .wav
-    const n = (+a.dataset.try || 0) + 1;
-    if(n < exts.length && a.dataset.season){ a.dataset.try = n; a.src = "/crowd-assets/music_" + a.dataset.season + exts[n]; a.play().catch(() => {}); }
-  };
-  return (SND.music = {a, g});
-}
-function setSrc(m, season){
-  m.a.dataset.season = season; m.a.dataset.try = 0;
-  m.a.src = "/crowd-assets/music_" + season + ".mp3";
-  m.a.play().catch(() => {});
-}
-function fade(m, to, secs){
-  const now = SND.ctx.currentTime;
-  m.g.gain.cancelScheduledValues(now); m.g.gain.setValueAtTime(m.g.gain.value, now); m.g.gain.linearRampToValueAtTime(to, now + secs);
-}
-function musicSeason(){
-  if(!s) return null;
-  if(s.phase === "betting") return s.forecast ? s.forecast.season : SND.current;
-  if(s.phase === "running" || s.phase === "crashed") return s.season || SND.current;
-  return SND.current;
-}
-function syncMusic(firstTap){
-  if(!SND.ctx) return;
-  const m = musicEl();
-  const want = SND.musicOn ? musicSeason() : null;
-  if(firstTap){                                 // iPhones: the player must start inside a tap, so prime it now
-    setSrc(m, want || "spring");
-    if(want){ SND.current = want; fade(m, MUSIC_VOL, 1.5); } else { m.a.pause(); SND.current = null; }
-    return;
-  }
-  if(want === SND.current) return;
-  SND.current = want;
-  const token = SND.switchId = (SND.switchId || 0) + 1;
-  fade(m, 0, 0.7);                              // dip out, swap the track, fade back in
-  setTimeout(() => {
-    if(token !== SND.switchId) return;
-    if(!want){ m.a.pause(); return; }
-    if(m.a.dataset.season !== want) setSrc(m, want); else m.a.play().catch(() => {});
-    fade(m, MUSIC_VOL, 1.2);
-  }, 750);
-}
-function duckMusic(){
-  const m = SND.music; if(!m || !SND.current) return;
-  fade(m, MUSIC_VOL * 0.3, 0.3);
-  setTimeout(() => { if(SND.current) fade(m, MUSIC_VOL, 1.2); }, 2500);
-}
+        function musicEl() {
+            if (SND.music) return SND.music;
+            const a = new Audio(); a.loop = true; a.preload = "auto"; a.setAttribute("playsinline", "");
+            const g = SND.ctx.createGain(); g.gain.value = 0;
+            SND.ctx.createMediaElementSource(a).connect(g); g.connect(SND.ctx.destination);
+            const exts = [".mp3", ".ogg", ".wav"];
+            a.onerror = () => {                          // music_<season>.mp3 missing? try .ogg, then .wav
+                const n = (+a.dataset.try || 0) + 1;
+                if (n < exts.length && a.dataset.season) { a.dataset.try = n; a.src = "/crowd-assets/music_" + a.dataset.season + exts[n]; a.play().catch(() => { }); }
+            };
+            return (SND.music = { a, g });
+        }
+        function setSrc(m, season) {
+            m.a.dataset.season = season; m.a.dataset.try = 0;
+            m.a.src = "/crowd-assets/music_" + season + ".mp3";
+            m.a.play().catch(() => { });
+        }
+        function fade(m, to, secs) {
+            const now = SND.ctx.currentTime;
+            m.g.gain.cancelScheduledValues(now); m.g.gain.setValueAtTime(m.g.gain.value, now); m.g.gain.linearRampToValueAtTime(to, now + secs);
+        }
+        function musicSeason() {
+            if (!s) return null;
+            if (s.phase === "betting") return s.forecast ? s.forecast.season : SND.current;
+            if (s.phase === "running" || s.phase === "crashed") return s.season || SND.current;
+            return SND.current;
+        }
+        function syncMusic(firstTap) {
+            if (!SND.ctx) return;
+            const m = musicEl();
+            const want = SND.musicOn ? musicSeason() : null;
+            if (firstTap) {                                 // iPhones: the player must start inside a tap, so prime it now
+                setSrc(m, want || "spring");
+                if (want) { SND.current = want; fade(m, MUSIC_VOL, 1.5); } else { m.a.pause(); SND.current = null; }
+                return;
+            }
+            if (want === SND.current) return;
+            SND.current = want;
+            const token = SND.switchId = (SND.switchId || 0) + 1;
+            fade(m, 0, 0.7);                              // dip out, swap the track, fade back in
+            setTimeout(() => {
+                if (token !== SND.switchId) return;
+                if (!want) { m.a.pause(); return; }
+                if (m.a.dataset.season !== want) setSrc(m, want); else m.a.play().catch(() => { });
+                fade(m, MUSIC_VOL, 1.2);
+            }, 750);
+        }
+        function duckMusic() {
+            const m = SND.music; if (!m || !SND.current) return;
+            fade(m, MUSIC_VOL * 0.3, 0.3);
+            setTimeout(() => { if (SND.current) fade(m, MUSIC_VOL, 1.2); }, 2500);
+        }
 
-function soundEvents(s, hasBet, cashed){
-  if(ev.count >= 0 && s.player_count > ev.count) sfx("join", 0.7);
-  ev.count = s.player_count;
-  const fc = s.forecast ? s.forecast.season : "";
-  if(s.phase === "betting" && (ev.phase !== "betting" || fc !== ev.forecast) && fc) sfx("reel_land", 0.8);   // season revealed / changed
-  if(s.phase === "crashed" && ev.phase === "running"){
-    sfx("crash", 0.7); sfx(DISTRACTION_SFX[s.distraction] || "d_box", 0.85);
-    setTimeout(() => sfx("meow", 0.8, "cat_meow.wav"), 350); duckMusic();
-  }
-  const running = s.phase === "running";
-  if(running && s.butterfly && !ev.butterfly) sfx("butterfly", 0.9);
-  if(running && s.leaf_storm && !ev.storm) sfx("leafstorm", 0.8);
-  if(running && s.rush && !warming() && ev.rushRound !== s.round_no){ ev.rushRound = s.round_no; sfx("zoomies", 0.9); }
-  ev.butterfly = running && s.butterfly; ev.storm = running && s.leaf_storm;
-  ev.phase = s.phase; ev.forecast = fc;
-  syncMusic();
-}
-function frameSounds(m){
-  const w = !!warming();
-  if(ev.warming && !w && s.phase === "running") sfx("go", 0.7);
-  ev.warming = w;
-  const me = s.you || {};
-  if(s.phase === "running" && s.rules && s.rules.season === "winter" && m >= s.cocoa_line && me.bet > 0 && !(me.cashed_at > 0) && ev.cocoaRound !== s.round_no){
-    ev.cocoaRound = s.round_no; sfx("cocoa", 0.9);
-  }
-}
+        function soundEvents(s, hasBet, cashed) {
+            if (ev.count >= 0 && s.player_count > ev.count) sfx("join", 0.7);
+            ev.count = s.player_count;
+            const fc = s.forecast ? s.forecast.season : "";
+            if (s.phase === "betting" && (ev.phase !== "betting" || fc !== ev.forecast) && fc) sfx("reel_land", 0.8);   // season revealed / changed
+            if (s.phase === "crashed" && ev.phase === "running") {
+                sfx("crash", 0.7); sfx(DISTRACTION_SFX[s.distraction] || "d_box", 0.85);
+                setTimeout(() => sfx("meow", 0.8, "cat_meow.wav"), 350); duckMusic();
+            }
+            const running = s.phase === "running";
+            if (running && s.butterfly && !ev.butterfly) sfx("butterfly", 0.9);
+            if (running && s.leaf_storm && !ev.storm) sfx("leafstorm", 0.8);
+            if (running && s.rush && !warming() && ev.rushRound !== s.round_no) { ev.rushRound = s.round_no; sfx("zoomies", 0.9); }
+            ev.butterfly = running && s.butterfly; ev.storm = running && s.leaf_storm;
+            ev.phase = s.phase; ev.forecast = fc;
+            syncMusic();
+        }
+        function frameSounds(m) {
+            const w = !!warming();
+            if (ev.warming && !w && s.phase === "running") sfx("go", 0.7);
+            ev.warming = w;
+            const me = s.you || {};
+            if (s.phase === "running" && s.rules && s.rules.season === "winter" && m >= s.cocoa_line && me.bet > 0 && !(me.cashed_at > 0) && ev.cocoaRound !== s.round_no) {
+                ev.cocoaRound = s.round_no; sfx("cocoa", 0.9);
+            }
+        }
 
-function paintSoundButtons(){
-  $("musicBtn").classList.toggle("off", !SND.musicOn); $("sfxBtn").classList.toggle("off", !SND.sfxOn);
-}
-$("musicBtn").onclick = () => { SND.musicOn = !SND.musicOn; localStorage.setItem("kc_music", SND.musicOn ? "1" : "0"); paintSoundButtons(); audioUnlock(); syncMusic(); };
-$("sfxBtn").onclick = () => { SND.sfxOn = !SND.sfxOn; localStorage.setItem("kc_sfx", SND.sfxOn ? "1" : "0"); paintSoundButtons(); audioUnlock(); };
-paintSoundButtons();
+        function paintSoundButtons() {
+            $("musicBtn").classList.toggle("off", !SND.musicOn); $("sfxBtn").classList.toggle("off", !SND.sfxOn);
+        }
+        $("musicBtn").onclick = () => { SND.musicOn = !SND.musicOn; localStorage.setItem("kc_music", SND.musicOn ? "1" : "0"); paintSoundButtons(); audioUnlock(); syncMusic(); };
+        $("sfxBtn").onclick = () => { SND.sfxOn = !SND.sfxOn; localStorage.setItem("kc_sfx", SND.sfxOn ? "1" : "0"); paintSoundButtons(); audioUnlock(); };
+        paintSoundButtons();
 
-// ───────── the mini cat scene ─────────
-// Sprite sheets: one row per animation, 120x64 frames (same art as the big screen).
-const ANIM = {walk:[0,8], run:[1,8], idle:[2,10], stretch:[3,13], sleep:[4,9], pounce:[5,4], meow:[6,4], sit:[7,1], lick:[8,5]};
-const SKINS = ["Ginger","Shadow","Siamese","Sphynx","Snowball","Tabby"];
-const SKY = {
-  spring:["#26355a","#7fc8a9","#4f8f5f"], summer:["#2f5f9a","#ffd27f","#7aa84a"],
-  fall:["#3b2a4a","#e98a4b","#9a5a2a"],   winter:["#1d2b4a","#a9c7e8","#dfe9f5"],
-  "":["#231f3a","#4a3d72","#3a3160"]};
-const PROP = {fish:"🐟", yarn:"🧶", butterfly:"🦋", laser:"🔴", cardboard_box:"📦", sleep:"💤"};
-const cv = $("scene"), cx = cv.getContext("2d");
-let skin = +(localStorage.getItem("kc_skin") || 1), sheets = {}, scroll = 0, lastT = performance.now();
-let crashAt = 0, skinMsgUntil = 0, flakes = [];
+        // ───────── the mini cat scene ─────────
+        // Sprite sheets: one row per animation, 120x64 frames (same art as the big screen).
+        const ANIM = { walk: [0, 8], run: [1, 8], idle: [2, 10], stretch: [3, 13], sleep: [4, 9], pounce: [5, 4], meow: [6, 4], sit: [7, 1], lick: [8, 5] };
+        const SKINS = ["Ginger", "Shadow", "Siamese", "Sphynx", "Snowball", "Tabby"];
+        const SKY = {
+            spring: ["#26355a", "#7fc8a9", "#4f8f5f"], summer: ["#2f5f9a", "#ffd27f", "#7aa84a"],
+            fall: ["#3b2a4a", "#e98a4b", "#9a5a2a"], winter: ["#1d2b4a", "#a9c7e8", "#dfe9f5"],
+            "": ["#231f3a", "#4a3d72", "#3a3160"]
+        };
+        const PROP = { fish: "🐟", yarn: "🧶", butterfly: "🦋", laser: "🔴", cardboard_box: "📦", sleep: "💤" };
+        const cv = $("scene"), cx = cv.getContext("2d");
+        let skin = +(localStorage.getItem("kc_skin") || 1), sheets = {}, scroll = 0, lastT = performance.now();
+        let crashAt = 0, skinMsgUntil = 0, flakes = [];
 
-function sheet(k){ if(!sheets[k]){ const im = new Image(); im.src = "/crowd-assets/cat" + k + ".png"; sheets[k] = im; } return sheets[k]; }
-sheet(skin);
-cv.onclick = () => { skin = skin % 6 + 1; localStorage.setItem("kc_skin", skin); sheet(skin); skinMsgUntil = performance.now() + 1500; };
+        function sheet(k) { if (!sheets[k]) { const im = new Image(); im.src = "/crowd-assets/cat" + k + ".png"; sheets[k] = im; } return sheets[k]; }
+        sheet(skin);
+        cv.onclick = () => { skin = skin % 6 + 1; localStorage.setItem("kc_skin", skin); sheet(skin); skinMsgUntil = performance.now() + 1500; };
 
-function pickAnim(now){
-  if(!s) return ["idle", now/1000, 8, true];
-  if(s.phase==="running"){
-    const t = walkTime();
-    if(t < s.warmup) return ["stretch", t, ANIM.stretch[1]/Math.max(0.5, s.warmup), false];   // stretches over the warm-up
-    const m = Math.exp(s.growth_rate*(t - s.warmup));
-    return m < 1.6 ? ["walk", t, 9 + m*2, true] : ["run", t, Math.min(24, 10 + m*3), true];
-  }
-  if(s.phase==="crashed"){
-    const t = (now - crashAt)/1000, d = s.distraction || "";
-    if(d==="sleep") return ["sleep", t, 8, false];
-    if(d==="fish") return ["meow", t, 6, true];
-    if(d==="cardboard_box") return ["sit", t, 1, false];
-    if(t < 0.5) return ["pounce", t, 8, false];
-    return ["lick", t, 6, true];
-  }
-  return ["idle", now/1000, 8, true];
-}
+        function pickAnim(now) {
+            if (!s) return ["idle", now / 1000, 8, true];
+            if (s.phase === "running") {
+                const t = walkTime();
+                if (t < s.warmup) return ["stretch", t, ANIM.stretch[1] / Math.max(0.5, s.warmup), false];   // stretches over the warm-up
+                const m = Math.exp(s.growth_rate * (t - s.warmup));
+                return m < 1.6 ? ["walk", t, 9 + m * 2, true] : ["run", t, Math.min(24, 10 + m * 3), true];
+            }
+            if (s.phase === "crashed") {
+                const t = (now - crashAt) / 1000, d = s.distraction || "";
+                if (d === "sleep") return ["sleep", t, 8, false];
+                if (d === "fish") return ["meow", t, 6, true];
+                if (d === "cardboard_box") return ["sit", t, 1, false];
+                if (t < 0.5) return ["pounce", t, 8, false];
+                return ["lick", t, 6, true];
+            }
+            return ["idle", now / 1000, 8, true];
+        }
 
-function drawScene(now){
-  const dpr = Math.min(3, window.devicePixelRatio || 1);
-  const W = Math.round(cv.clientWidth*dpr), H = Math.round(cv.clientHeight*dpr);
-  if(cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
-  const dt = Math.min(0.1, (now - lastT)/1000); lastT = now;
-  cx.imageSmoothingEnabled = false;
+        function drawScene(now) {
+            const dpr = Math.min(3, window.devicePixelRatio || 1);
+            const W = Math.round(cv.clientWidth * dpr), H = Math.round(cv.clientHeight * dpr);
+            if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+            const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
+            cx.imageSmoothingEnabled = false;
 
-  const season = !s ? "" : (s.phase==="running" || s.phase==="crashed") ? (s.season || "") : (s.phase==="betting" && s.forecast) ? s.forecast.season : "";
-  const [top, bottom, ground] = SKY[season] || SKY[""];
+            const season = !s ? "" : (s.phase === "running" || s.phase === "crashed") ? (s.season || "") : (s.phase === "betting" && s.forecast) ? s.forecast.season : "";
+            const [top, bottom, ground] = SKY[season] || SKY[""];
 
-  // speed of the world = how fast the multiplier is climbing
-  let speed = 0;
-  if(s && s.phase==="running"){ const t = walkTime(); if(t >= s.warmup) speed = 40 + 60*Math.exp(s.growth_rate*(t - s.warmup))*s.growth_rate*8; }
-  scroll += speed*dt*dpr;
+            // speed of the world = how fast the multiplier is climbing
+            let speed = 0;
+            if (s && s.phase === "running") { const t = walkTime(); if (t >= s.warmup) speed = 40 + 60 * Math.exp(s.growth_rate * (t - s.warmup)) * s.growth_rate * 8; }
+            scroll += speed * dt * dpr;
 
-  // sky + two hill layers (parallax)
-  const g = cx.createLinearGradient(0,0,0,H); g.addColorStop(0,top); g.addColorStop(1,bottom);
-  cx.fillStyle = g; cx.fillRect(0,0,W,H);
-  const groundY = H*0.82;
-  [[0.25,0.55,0.22],[0.55,0.68,0.35]].forEach(([par, base, alpha], i) => {
-    cx.fillStyle = `rgba(0,0,0,${alpha})`; cx.beginPath(); cx.moveTo(0,H);
-    for(let x=0; x<=W; x+=4*dpr){ const u = (x + scroll*par)/(W*(0.35+i*0.15)); cx.lineTo(x, H*base - Math.sin(u*Math.PI*2)*H*0.08 - Math.sin(u*5.3)*H*0.03); }
-    cx.lineTo(W,H); cx.fill();
-  });
+            // sky + two hill layers (parallax)
+            const g = cx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, top); g.addColorStop(1, bottom);
+            cx.fillStyle = g; cx.fillRect(0, 0, W, H);
+            const groundY = H * 0.82;
+            [[0.25, 0.55, 0.22], [0.55, 0.68, 0.35]].forEach(([par, base, alpha], i) => {
+                cx.fillStyle = `rgba(0,0,0,${alpha})`; cx.beginPath(); cx.moveTo(0, H);
+                for (let x = 0; x <= W; x += 4 * dpr) { const u = (x + scroll * par) / (W * (0.35 + i * 0.15)); cx.lineTo(x, H * base - Math.sin(u * Math.PI * 2) * H * 0.08 - Math.sin(u * 5.3) * H * 0.03); }
+                cx.lineTo(W, H); cx.fill();
+            });
 
-  // season particles
-  if(season && flakes.length < 26) flakes.push({x:Math.random()*W, y:-5, v:20+Math.random()*30, r:Math.random()});
-  const pc = {spring:"#ffc0d8", summer:"#fff3a0", fall:"#ff9a3c", winter:"#ffffff"}[season];
-  flakes = flakes.filter(f => f.y < H);
-  flakes.forEach(f => { f.y += f.v*dt*dpr; f.x -= (speed*0.6 + 10)*dt*dpr; if(f.x < 0) f.x += W; if(pc){ cx.fillStyle = pc; cx.fillRect(f.x, f.y, 3*dpr, 3*dpr); } });
-  if(!season) flakes = [];
+            // season particles
+            if (season && flakes.length < 26) flakes.push({ x: Math.random() * W, y: -5, v: 20 + Math.random() * 30, r: Math.random() });
+            const pc = { spring: "#ffc0d8", summer: "#fff3a0", fall: "#ff9a3c", winter: "#ffffff" }[season];
+            flakes = flakes.filter(f => f.y < H);
+            flakes.forEach(f => { f.y += f.v * dt * dpr; f.x -= (speed * 0.6 + 10) * dt * dpr; if (f.x < 0) f.x += W; if (pc) { cx.fillStyle = pc; cx.fillRect(f.x, f.y, 3 * dpr, 3 * dpr); } });
+            if (!season) flakes = [];
 
-  // ground with moving dashes
-  cx.fillStyle = ground; cx.fillRect(0, groundY, W, H-groundY);
-  cx.fillStyle = "rgba(0,0,0,.25)";
-  const dash = 28*dpr, off = scroll % dash;
-  for(let x=-off; x<W; x+=dash) cx.fillRect(x, groundY + (H-groundY)*0.45, dash*0.5, 3*dpr);
+            // ground with moving dashes
+            cx.fillStyle = ground; cx.fillRect(0, groundY, W, H - groundY);
+            cx.fillStyle = "rgba(0,0,0,.25)";
+            const dash = 28 * dpr, off = scroll % dash;
+            for (let x = -off; x < W; x += dash) cx.fillRect(x, groundY + (H - groundY) * 0.45, dash * 0.5, 3 * dpr);
 
-  // the cat
-  const [name, t, fps, loop] = pickAnim(now);
-  const [row, n] = ANIM[name];
-  let f = Math.floor(t*fps); f = loop ? f % n : Math.min(n-1, Math.max(0, f));
-  const sc = Math.max(1, Math.round(H*0.6/64)), cw = 120*sc, ch = 64*sc;
-  const catX = Math.round(W*0.42 - cw/2), catY = Math.round(groundY - ch + 4*dpr);
-  const im = sheet(skin);
-  if(im.complete && im.naturalWidth) cx.drawImage(im, f*120, row*64, 120, 64, catX, catY, cw, ch);
+            // the cat
+            const [name, t, fps, loop] = pickAnim(now);
+            const [row, n] = ANIM[name];
+            let f = Math.floor(t * fps); f = loop ? f % n : Math.min(n - 1, Math.max(0, f));
+            const sc = Math.max(1, Math.round(H * 0.6 / 64)), cw = 120 * sc, ch = 64 * sc;
+            const catX = Math.round(W * 0.42 - cw / 2), catY = Math.round(groundY - ch + 4 * dpr);
+            const im = sheet(skin);
+            if (im.complete && im.naturalWidth) cx.drawImage(im, f * 120, row * 64, 120, 64, catX, catY, cw, ch);
 
-  // season events in the scene
-  cx.textAlign = "center"; cx.textBaseline = "middle";
-  if(s && s.phase==="running" && s.butterfly){
-    const bx = catX + cw*0.75 + Math.sin(now/260)*cw*0.25, by = catY + ch*0.1 + Math.sin(now/130)*10*dpr;
-    cx.save(); cx.shadowColor = "#ffd23c"; cx.shadowBlur = 18*dpr;
-    cx.font = `${30*dpr}px system-ui`; cx.fillText("🦋", bx, by); cx.restore();
-    for(let i=0;i<5;i++){ cx.fillStyle = `rgba(255,220,80,${0.8 - i*0.15})`; cx.fillRect(bx - (i+1)*9*dpr, by + Math.sin(now/90 + i)*6*dpr, 3*dpr, 3*dpr); }
-  }
-  if(s && s.phase==="running" && s.leaf_storm){
-    for(let i=0;i<60;i++){
-      const x = (i*97.3 + now*0.35*(1 + (i%5)*0.3)) % (W + 40*dpr) - 20*dpr;
-      const y = (i*53.7 + now*0.08*(1 + (i%3))) % H;
-      cx.fillStyle = ["#ff8a3c","#e8a33a","#c4502a","#ffb35c"][i%4];
-      cx.save(); cx.translate(W - x, y); cx.rotate(now/300 + i); cx.fillRect(-5*dpr, -3*dpr, 10*dpr, 6*dpr); cx.restore();
-    }
-  }
+            // season events in the scene
+            cx.textAlign = "center"; cx.textBaseline = "middle";
+            if (s && s.phase === "running" && s.butterfly) {
+                const bx = catX + cw * 0.75 + Math.sin(now / 260) * cw * 0.25, by = catY + ch * 0.1 + Math.sin(now / 130) * 10 * dpr;
+                cx.save(); cx.shadowColor = "#ffd23c"; cx.shadowBlur = 18 * dpr;
+                cx.font = `${30 * dpr}px system-ui`; cx.fillText("🦋", bx, by); cx.restore();
+                for (let i = 0; i < 5; i++) { cx.fillStyle = `rgba(255,220,80,${0.8 - i * 0.15})`; cx.fillRect(bx - (i + 1) * 9 * dpr, by + Math.sin(now / 90 + i) * 6 * dpr, 3 * dpr, 3 * dpr); }
+            }
+            if (s && s.phase === "running" && s.leaf_storm) {
+                for (let i = 0; i < 60; i++) {
+                    const x = (i * 97.3 + now * 0.35 * (1 + (i % 5) * 0.3)) % (W + 40 * dpr) - 20 * dpr;
+                    const y = (i * 53.7 + now * 0.08 * (1 + (i % 3))) % H;
+                    cx.fillStyle = ["#ff8a3c", "#e8a33a", "#c4502a", "#ffb35c"][i % 4];
+                    cx.save(); cx.translate(W - x, y); cx.rotate(now / 300 + i); cx.fillRect(-5 * dpr, -3 * dpr, 10 * dpr, 6 * dpr); cx.restore();
+                }
+            }
 
-  if(s && s.phase==="crashed"){
-    const p = PROP[s.distraction] || "❗", bob = Math.sin(now/200)*4*dpr;
-    cx.font = `${30*dpr}px system-ui`; cx.fillText(p, catX + cw*0.95, catY + ch*0.25 + bob);
-    banner("DISTRACTED!", "#ff5a6a", dpr, W);
-  } else if(s && s.phase==="running" && s.you && s.you.cashed_at > 0){
-    banner("SAFE!  " + s.you.cashed_at.toFixed(2) + "x" + (s.you.bonus==="butterfly" ? " 🦋" : s.you.bonus==="cocoa" ? " ☕" : ""), "#4fe08a", dpr, W);
-  } else if(s && s.phase==="running" && s.butterfly){
-    banner("GOLDEN BUTTERFLY! +25%", "#ffd23c", dpr, W);
-  } else if(s && s.phase==="running" && s.leaf_storm){
-    banner("LEAF STORM! 🍂", "#ff9a3c", dpr, W);
-  } else if(s && s.phase==="running" && s.rush && walkTime() >= s.warmup && Math.floor(now/300)%2){
-    banner("☀️ SUMMER RUSH", "#ffd23c", dpr, W);
-  } else if(s && s.phase==="running" && walkTime() < s.warmup){
-    banner("stretching…", "#ffffff", dpr, W);
-  }
-  const hintY = H - 9*dpr;
-  if(now < skinMsgUntil){ cx.font = `600 ${13*dpr}px Fredoka, system-ui`; cx.fillStyle = "#fff"; cx.textAlign = "right"; cx.fillText("🐾 " + SKINS[skin-1], W - 10*dpr, hintY); }
-  else if(!localStorage.getItem("kc_skin")){ cx.font = `${12*dpr}px Fredoka, system-ui`; cx.fillStyle = "rgba(255,255,255,.75)"; cx.textAlign = "right"; cx.fillText("tap to change cat", W - 10*dpr, hintY); }
-}
+            if (s && s.phase === "crashed") {
+                const p = PROP[s.distraction] || "❗", bob = Math.sin(now / 200) * 4 * dpr;
+                cx.font = `${30 * dpr}px system-ui`; cx.fillText(p, catX + cw * 0.95, catY + ch * 0.25 + bob);
+                banner("DISTRACTED!", "#ff5a6a", dpr, W);
+            } else if (s && s.phase === "running" && s.you && s.you.cashed_at > 0) {
+                banner("SAFE!  " + s.you.cashed_at.toFixed(2) + "x" + (s.you.bonus === "butterfly" ? " 🦋" : s.you.bonus === "cocoa" ? " ☕" : ""), "#4fe08a", dpr, W);
+            } else if (s && s.phase === "running" && s.butterfly) {
+                banner("GOLDEN BUTTERFLY! +25%", "#ffd23c", dpr, W);
+            } else if (s && s.phase === "running" && s.leaf_storm) {
+                banner("LEAF STORM! 🍂", "#ff9a3c", dpr, W);
+            } else if (s && s.phase === "running" && s.rush && walkTime() >= s.warmup && Math.floor(now / 300) % 2) {
+                banner("☀️ SUMMER RUSH", "#ffd23c", dpr, W);
+            } else if (s && s.phase === "running" && walkTime() < s.warmup) {
+                banner("stretching…", "#ffffff", dpr, W);
+            }
+            const hintY = H - 9 * dpr;
+            if (now < skinMsgUntil) { cx.font = `600 ${13 * dpr}px Fredoka, system-ui`; cx.fillStyle = "#fff"; cx.textAlign = "right"; cx.fillText("🐾 " + SKINS[skin - 1], W - 10 * dpr, hintY); }
+            else if (!localStorage.getItem("kc_skin")) { cx.font = `${12 * dpr}px Fredoka, system-ui`; cx.fillStyle = "rgba(255,255,255,.75)"; cx.textAlign = "right"; cx.fillText("tap to change cat", W - 10 * dpr, hintY); }
+        }
 
-function banner(text, color, dpr, W){
-  cx.font = `700 ${20*dpr}px Fredoka, system-ui`; cx.textAlign = "center";
-  cx.lineWidth = 5*dpr; cx.strokeStyle = "rgba(0,0,0,.55)"; cx.strokeText(text, W/2, 22*dpr);
-  cx.fillStyle = color; cx.fillText(text, W/2, 22*dpr);
-}
+        function banner(text, color, dpr, W) {
+            cx.font = `700 ${20 * dpr}px Fredoka, system-ui`; cx.textAlign = "center";
+            cx.lineWidth = 5 * dpr; cx.strokeStyle = "rgba(0,0,0,.55)"; cx.strokeText(text, W / 2, 22 * dpr);
+            cx.fillStyle = color; cx.fillText(text, W / 2, 22 * dpr);
+        }
 
-(function sceneLoop(now){ drawScene(now); requestAnimationFrame(sceneLoop); })(performance.now());
+        (function sceneLoop(now) { drawScene(now); requestAnimationFrame(sceneLoop); })(performance.now());
 
-show(); poll(); setInterval(poll, 300); requestAnimationFrame(frame);
-</script>
+        show(); poll(); setInterval(poll, 300); requestAnimationFrame(frame);
+    </script>
 </body>
+
 </html>
