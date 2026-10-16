@@ -1,22 +1,3 @@
-"""
-FOUR SEASONS, FOUR RULES
-Every season changes ONE axis of the game, so the season you're in changes how you should play:
-
-  SPRING  - timing       A golden butterfly flutters by once per walk. Cash out while it's
-                         on screen and the butterfly blesses you: +25%.
-  SUMMER  - speed        Summer Zoomies: 40% chance kitty sprints and the multiplier climbs
-                         much faster (rolled by the same RNG as the crash point).
-  FALL    - information  Leaf Storms: gusts of leaves hide the multiplier for a few seconds.
-                         You only see the cat. Trust your gut.
-  WINTER  - patience     Slow, sleepy walk. Hold on to 2.00x or more and get a +10% hot-cocoa bonus.
-
-The season of the next walk is decided BEFORE betting opens (a forecast), so players can plan.
-Event times (butterfly, leaf storms) are rolled independently of the crash point, so seeing (or not
-seeing) them tells you nothing about when kitty will get distracted.
-
-Bonuses are paid as a higher cash-out multiplier (e.g. 2.00x with the butterfly = 2.50x), so every
-payout is still exactly wager x multiplier.
-"""
 
 import math
 import secrets

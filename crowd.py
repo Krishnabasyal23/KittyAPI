@@ -1,16 +1,3 @@
-"""
-CROWD MODE - everyone in the room bets on the same cat from their phone.
-
-How it fits together:
-  * The Unity game (the "host") calls POST /api/crowd/host once, then POST /api/crowd/open every
-    time its betting countdown starts.
-  * Phones open /crowd (the QR code on screen), join with a name and bet while betting is open.
-  * When the host starts its next API round, main.py calls crowd.attach(...): the crowd rides on
-    that exact round - same quantum crash point, same clock, same provably-fair seal.
-  * Phones cash out against the server clock, so nobody can cheat by lag.
-
-Crowd credits live in memory (fresh 1000 per player, reset when the server restarts).
-"""
 
 import math
 import os
