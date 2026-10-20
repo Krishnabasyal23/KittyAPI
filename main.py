@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from database.connection import initialize_database
 from database.session_repository import SQLiteSessionStore
+from randomness import LIVE_RNG_MODES
 from round_manager import RoundManager
 from crowd import CrowdTable, make_router as make_crowd_router
 from season_rules import describe as describe_season
@@ -84,7 +85,7 @@ GAME_RNG_MODE = os.getenv(
     "GAME_RNG_MODE", "hybrid"
 ).lower()
 
-if GAME_RNG_MODE not in {"hybrid", "secure"}:
+if GAME_RNG_MODE not in LIVE_RNG_MODES:
     raise RuntimeError(
         "Gameplay RNG must be 'hybrid' or 'secure'"
     )
