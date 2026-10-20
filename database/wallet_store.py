@@ -15,6 +15,7 @@ from hashlib import sha256
 from math import isfinite
 from time import time as wall_clock
 
+from fairness import proof_to_columns
 from economy import INITIAL_BALANCE, MAX_BET, MIN_BET, calculate_cashout, validate_points
 from errors import InsufficientPoints, WalletError
 
@@ -137,8 +138,10 @@ class WalletStore:
         rush: bool = False,
         lead_in_seconds: float = 3.0,
         started_epoch: float | None = None,
+        proof: dict | None = None,
     ) -> int:
-        """Debit the wager and create the round in one transaction. Returns the new balance."""
+        """Debit the wager and create the round (with its sealed fairness proof) in one transaction.
+        Returns the new balance."""
         wager = validate_points(wager)
         if not MIN_BET <= wager <= MAX_BET:
             raise ValueError("Wager outside betting limits")
@@ -159,6 +162,12 @@ class WalletStore:
                  growth_rate, int(rush), lead_in_seconds,
                  started_epoch if started_epoch is not None else wall_clock()),
             )
+            seal = proof_to_columns(proof)
+            if seal:
+                conn.execute(
+                    f"UPDATE rounds SET {', '.join(f'{c} = ?' for c in seal)} WHERE round_id = ?",
+                    (*seal.values(), round_id),
+                )
             _, balance = self._post(conn, session_id, "wager", -wager, round_id=round_id)
             return balance
 

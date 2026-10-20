@@ -23,7 +23,7 @@ from economy import (
     credit_winnings,
 )
 
-from fairness import NotRevealedYet, make_proof, public_reveal, verify as verify_proof
+from fairness import NotRevealedYet, make_proof, proof_from_columns, public_reveal, verify as verify_proof
 from randomness import LIVE_RNG_MODES
 from season_rules import (
     plan as plan_season_events,
@@ -149,6 +149,7 @@ class RoundManager:
                         if saved["cashout_multiplier"] is not None else None
                     ),
                     "payout": saved["payout_points"],
+                    "proof": proof_from_columns(saved),
                 }
 
                 self.rounds[round_id] = round_data
@@ -273,6 +274,7 @@ class RoundManager:
                     growth_rate=growth_rate,
                     rush=rush,
                     lead_in_seconds=MIN_CRASH_SECONDS,
+                    proof=proof,
                 )
 
             start_time = self._clock()
