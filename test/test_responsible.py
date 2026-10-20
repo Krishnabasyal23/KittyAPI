@@ -5,6 +5,8 @@ import pytest
 from database.connection import initialize_database
 from database.wallet_store import WalletStore
 from errors import PlayBlocked
+from dataclasses import replace
+
 from responsible import DefaultPolicy, RGSettings
 
 NOW = datetime(2026, 10, 20, 15, 0, tzinfo=timezone.utc)
@@ -16,6 +18,7 @@ def store(tmp_path):
     initialize_database(db)
     s = WalletStore(db, today=lambda: "2026-10-20", now=lambda: NOW)
     s.ensure_wallet("pc1", "pc")
+    s.confirm_age("pc1")
     return s
 
 
@@ -24,7 +27,8 @@ def iso(moment):
 
 
 def test_no_settings_means_no_limits(store):
-    assert store.get_rg_settings("pc1") == RGSettings()
+    rg = store.get_rg_settings("pc1")
+    assert rg == replace(RGSettings(), age_confirmed_at=rg.age_confirmed_at)
     store.record_wager("pc1", "r1", 50, 2.0, 3.0, "fish")
     assert store.balance("pc1") == 0
 
@@ -64,7 +68,8 @@ def test_daily_spend_limit_counts_net_wagers_today(store):
 def test_settings_upsert_and_clear(store):
     store.set_rg_settings("pc1", daily_spend_limit_points=20, reality_check_minutes=15)
     store.set_rg_settings("pc1", daily_spend_limit_points=None)
-    assert store.get_rg_settings("pc1") == RGSettings(reality_check_minutes=15)
+    rg = store.get_rg_settings("pc1")
+    assert rg == RGSettings(reality_check_minutes=15, age_confirmed_at=rg.age_confirmed_at)
     with pytest.raises(ValueError, match="Unknown setting"):
         store.set_rg_settings("pc1", max_fun=3)
 

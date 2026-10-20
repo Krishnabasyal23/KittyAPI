@@ -19,6 +19,7 @@ def table(tmp_path, monkeypatch):
     manager = RoundManager(clock=lambda: clock[0], session_store=store)
     t = CrowdTable(manager, store)
     host = manager.create_session()["session_id"]
+    store.confirm_age(host)
     t.set_host(host, 8001, "Screen")
     return t, store, manager, host, clock
 
@@ -36,14 +37,14 @@ def start_walk(t, manager, host):
 
 def test_join_creates_a_50_point_phone_wallet(table):
     t, store, *_ = table
-    joined = t.join("Ada")
+    joined = t.join("Ada", age_confirmed=True)
     assert joined["balance"] == 50
     assert store.get_wallet(joined["player_id"])["kind"] == "phone"
 
 
 def test_rejoin_after_restart_keeps_the_wallet(table):
     t, store, manager, host, clock = table
-    pid = t.join("Ada")["player_id"]
+    pid = t.join("Ada", age_confirmed=True)["player_id"]
     t.open_betting(host, 5)
     t.bet(pid, "10")
 
@@ -61,7 +62,7 @@ def test_a_pc_wallet_is_never_seated_on_a_phone(table):
 
 def test_bet_ride_and_cash_out_is_persisted(table):
     t, store, manager, host, clock = table
-    pid = t.join("Ada")["player_id"]
+    pid = t.join("Ada", age_confirmed=True)["player_id"]
     t.open_betting(host, 5)
     assert t.bet(pid, "10")["balance"] == 40
     assert store.balance(pid) == 40
@@ -78,7 +79,7 @@ def test_bet_ride_and_cash_out_is_persisted(table):
 
 def test_crash_settles_every_riding_bet(table):
     t, store, manager, host, clock = table
-    a, b = t.join("Ada")["player_id"], t.join("Bo")["player_id"]
+    a, b = t.join("Ada", age_confirmed=True)["player_id"], t.join("Bo", age_confirmed=True)["player_id"]
     t.open_betting(host, 5)
     t.bet(a, "5")
     t.bet(b, "7")
@@ -98,7 +99,7 @@ def test_crash_settles_every_riding_bet(table):
 
 def test_bets_are_whole_points_within_the_wallet(table):
     t, store, manager, host, _ = table
-    pid = t.join("Ada")["player_id"]
+    pid = t.join("Ada", age_confirmed=True)["player_id"]
     t.open_betting(host, 5)
     with pytest.raises(HTTPException) as fractional:
         t.bet(pid, "2.5")
@@ -111,7 +112,7 @@ def test_bets_are_whole_points_within_the_wallet(table):
 
 def test_restart_refunds_bets_still_in_play(table):
     t, store, manager, host, _ = table
-    pid = t.join("Ada")["player_id"]
+    pid = t.join("Ada", age_confirmed=True)["player_id"]
     t.open_betting(host, 5)
     t.bet(pid, "10")
     start_walk(t, manager, host)

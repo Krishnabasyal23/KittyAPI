@@ -29,6 +29,8 @@ def store(tmp_path):
     DAY[0] = "2026-10-20"
     s.ensure_wallet("w1", "pc")
     s.ensure_wallet("w2", "phone", "Ada")
+    s.confirm_age("w1")
+    s.confirm_age("w2")
     return s
 
 
