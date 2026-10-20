@@ -291,6 +291,70 @@ class WalletStore:
                 ).fetchone()[0]
             return balance
 
+    # CROWD BETS (phones riding the big screen's walk)
+
+    def place_crowd_bet(self, wallet_id: str, bet_id: str, wager: int) -> int:
+        """Debit a phone's bet while betting is open. Returns the new balance."""
+        wager = validate_points(wager)
+        if not MIN_BET <= wager <= MAX_BET:
+            raise ValueError("Wager outside betting limits")
+        with self._write() as conn:
+            self._check_wager(conn, wallet_id, wager)
+            conn.execute(
+                "INSERT INTO crowd_bets(bet_id, wallet_id, wager_points, status) VALUES (?, ?, ?, 'open')",
+                (bet_id, wallet_id, wager),
+            )
+            _, balance = self._post(conn, wallet_id, "wager", -wager, bet_id=bet_id)
+            return balance
+
+    def attach_crowd_bets(self, bet_ids: list[str], round_id: str) -> int:
+        """The host started the walk: open bets now ride round_id. Returns how many."""
+        if not bet_ids:
+            return 0
+        with self._write() as conn:
+            cursor = conn.execute(
+                f"""
+                UPDATE crowd_bets SET round_id = ?, status = 'running'
+                WHERE status = 'open' AND bet_id IN ({', '.join('?' for _ in bet_ids)})
+                """,
+                (round_id, *bet_ids),
+            )
+            return cursor.rowcount
+
+    def settle_crowd_cashout(self, bet_id: str, multiplier, payout: int) -> int:
+        """Pay a phone that cashed out, exactly once. Returns the new balance."""
+        payout = validate_points(payout)
+        with self._write() as conn:
+            bet = conn.execute(
+                "SELECT wallet_id, wager_points, status FROM crowd_bets WHERE bet_id = ?", (bet_id,)
+            ).fetchone()
+            if bet is None or bet["status"] != "running":
+                raise ValueError("Bet already settled or not riding")
+            if payout != calculate_cashout(bet["wager_points"], multiplier):
+                raise ValueError("Payout does not match wager and multiplier")
+            conn.execute(
+                """
+                UPDATE crowd_bets SET status = 'cashed_out', payout_points = ?, cashout_multiplier = ?,
+                                      settled_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                WHERE bet_id = ? AND status = 'running'
+                """,
+                (payout, str(Decimal(str(multiplier))), bet_id),
+            )
+            _, balance = self._post(conn, bet["wallet_id"], "payout", payout, bet_id=bet_id)
+            return balance
+
+    def settle_crowd_crash(self, round_id: str) -> int:
+        """The cat got distracted: every bet still riding round_id is lost. Returns how many."""
+        with self._write() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE crowd_bets SET status = 'crashed', settled_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                WHERE round_id = ? AND status = 'running'
+                """,
+                (round_id,),
+            )
+            return cursor.rowcount
+
     # SERVER RESTART RECOVERY
 
     def recover_interrupted_rounds(self) -> int:
