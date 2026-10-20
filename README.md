@@ -31,6 +31,7 @@ uvicorn main:app --host 0.0.0.0 --port 8001
 | Variable | Default | Purpose |
 |---|---|---|
 | `KITTY_DB_PATH` | `data/kittycat.db` | SQLite file for sessions, rounds and the ledger. Point tests, scripts and v2 elsewhere. |
+| `HAPPY_HOUR` | unset | `1` (exactly) restores the demo season bonuses: butterfly +25%, cocoa +10%. Default is +4% for both, which keeps every strategy under 100% RTP. `/api/health` then shows `"promo": "HAPPY HOUR (demo)"`. Demos only. |
 | `GAME_RNG_MODE` | `hybrid` | `hybrid` (simulated quantum XOR `secrets`) or `secure` (`secrets` only). Any other value, including the seeded `classical` mode, stops the server at start-up. |
 | `CORS_ORIGINS` | localhost dev ports | Comma-separated browser origins allowed to call the API. |
 | `PUBLIC_URL` | LAN IP + port | Base URL put in the crowd-mode join QR (e.g. when behind a tunnel). |
@@ -42,12 +43,13 @@ Player endpoints take the session in the `X-Session-ID` header.
 
 | Method | Path | What it does |
 |---|---|---|
-| GET | `/api/health` | Status, version, RNG mode |
+| GET | `/api/health` | Status, version, RNG mode, season bonus sizes, happy-hour flag |
 | POST | `/api/sessions` | New player session with starting credits |
 | POST | `/api/rounds` | Bet (`{"wager": "10.00"}`) and start a walk |
 | GET | `/api/rounds/{id}/state` | Live multiplier, phase, season events |
 | POST | `/api/rounds/{id}/cashout` | Cash out at the current multiplier (+ season bonus) |
-| GET | `/api/rounds/{id}/result` | Crash point and distraction once the round is over |
+| GET | `/api/rounds/{id}/result` | Crash point, distraction and fairness proof once the cat is distracted |
+| GET | `/api/rounds/{id}/verify` | "Verify this round": revealed proof plus hash / math / qubit checks (409 until the crash) |
 | GET | `/api/rounds/{id}/season` | Season and event schedule for the game screen |
 | GET / POST | `/api/season/next` | Forecast / choose the next walk's season (host key N) |
 | GET | `/api/player/balance` | Current credits |
@@ -61,6 +63,25 @@ Player endpoints take the session in the `X-Session-ID` header.
 
 Interactive docs: `http://127.0.0.1:8000/docs`.
 
+## Provably fair seal
+
+`fairness.py` seals every round before anyone can cash out:
+
+1. **Round start** (`POST /api/rounds`) returns only `commitment = sha256("{round_id}:{value}:{salt}")`.
+   `value` is the random integer the crash point comes from; `salt` is secret.
+2. **After the crash** (not after your cash-out: the cat keeps walking for everyone else),
+   `/result` and `/verify` reveal `value`, `salt`, `bits`, the qubit samples and the classical mask.
+3. **Anyone can check:**
+   - the hash matches the published commitment;
+   - `crash = clamp(0.96 / ((value + 0.5) / 2^bits), 1, 100)`;
+   - in hybrid mode, `value == concat(quantum_samples) XOR classical_mask`.
+
+Seasons never touch the sealed value: Summer Zoomies and season events use separate draws, and
+bonuses only raise the cash-out multiplier. The JSON matches `QuantumProof` in the Unity client
+(`Fairness.cs`), which runs the same checks in the quantum box (key Q).
+
+Proofs are kept in memory: rounds from before a server restart have no proof (`/verify` returns 404).
+
 ## Tests and tools
 
 Run from this folder with the env active. Tests always use a temp database, never `data/kittycat.db`.
@@ -68,6 +89,7 @@ Run from this folder with the env active. Tests always use a temp database, neve
 ```bat
 python -m pytest -q --basetemp=D:\hhh\catt\.tmp\pytest
 python tests\sim_rtp.py           REM 400k-round RTP per cash-out target and season strategy
+python tests\sim_rtp.py --happy-hour  REM same with the HAPPY_HOUR demo bonuses
 python tests\load_test.py         REM real server on 8001 + 60 fake phones, reports errors and latency
 ```
 
