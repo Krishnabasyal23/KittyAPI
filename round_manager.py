@@ -2,7 +2,7 @@ import math
 import threading
 
 from decimal import Decimal
-from time import monotonic
+from time import monotonic, time as wall_clock
 from uuid import uuid4
 
 from crash_engine import (
@@ -17,13 +17,12 @@ from crash_engine import (
 
 from economy import (
     INITIAL_BALANCE,
-    validate_money,
+    validate_points,
     place_bet,
     calculate_cashout,
     credit_winnings,
 )
 
-from database.session_repository import from_cents
 from fairness import NotRevealedYet, make_proof, public_reveal, verify as verify_proof
 from randomness import LIVE_RNG_MODES
 from season_rules import (
@@ -131,9 +130,9 @@ class RoundManager:
 
                 round_data = {
                     "round_id": saved["round_id"],
-                    "session_id": saved["session_id"],
+                    "session_id": saved["wallet_id"],
                     "status": saved["status"],
-                    "wager": from_cents(saved["wager_cents"]),
+                    "wager": saved["wager_points"],
                     "crash_point": saved["crash_point"],
                     "crash_time": saved["crash_time_seconds"],
                     "distraction": saved["distraction"],
@@ -144,8 +143,12 @@ class RoundManager:
                     "lead_in_seconds": saved["lead_in_seconds"],
 
                     "start_time": None,
-                    "cashout_multiplier": saved["cashout_multiplier"],
-                    "payout": from_cents(saved["payout_cents"]),
+                    "started_epoch": saved["started_epoch"],
+                    "cashout_multiplier": (
+                        float(saved["cashout_multiplier"])
+                        if saved["cashout_multiplier"] is not None else None
+                    ),
+                    "payout": saved["payout_points"],
                 }
 
                 self.rounds[round_id] = round_data
@@ -195,8 +198,8 @@ class RoundManager:
     def _validate_can_start(
         self,
         session_id: str,
-        wager: Decimal,
-    ) -> Decimal:
+        wager: int,
+    ) -> int:
         session = self._session(session_id)
         active_id = session["active_round_id"]
 
@@ -228,13 +231,13 @@ class RoundManager:
     def start_round(
         self,
         session_id: str,
-        wager: Decimal,
+        wager: int | Decimal | str,
         rng_mode: str = "hybrid",
     ) -> dict:
         if rng_mode not in LIVE_RNG_MODES:
             raise ValueError(f"RNG mode '{rng_mode}' is not allowed for live rounds")
 
-        wager = validate_money(wager)
+        wager = validate_points(wager)
 
         with self._lock:
             self._validate_can_start(
@@ -284,7 +287,7 @@ class RoundManager:
                 "distraction": distraction,
                 "start_time": start_time,
                 "cashout_multiplier": None,
-                "payout": Decimal("0.00"),
+                "payout": 0,
                 "season": season,
                 "growth_rate": growth_rate,
                 "rush": rush,
@@ -385,7 +388,7 @@ class RoundManager:
                     "distraction": round_data[
                         "distraction"
                     ],
-                    "payout": "0.00",
+                    "payout": "0",
                 }
 
             if status == "interrupted":
@@ -393,7 +396,7 @@ class RoundManager:
                     "status": "interrupted",
                     "multiplier": None,
                     "distraction": None,
-                    "payout": "0.00",
+                    "payout": "0",
                 }
 
             return {
@@ -454,7 +457,7 @@ class RoundManager:
             if status in {"crashed", "interrupted"}:
                 return {
                     "status": status,
-                    "payout": "0.00",
+                    "payout": "0",
                     "balance": self.get_balance(
                         session_id
                     )["balance"],
@@ -576,8 +579,12 @@ class RoundManager:
         """True once the cat has been distracted. Rounds reloaded after a restart are long over."""
         if round_data["status"] == "running":
             return False
+        if round_data["status"] == "interrupted":
+            return True   # refunded after a restart: nobody can still win on it
         if round_data.get("start_time") is None:
-            return True
+            # reloaded from the database: use the wall clock the round started on
+            started = round_data.get("started_epoch")
+            return started is None or wall_clock() >= started + round_data["crash_time"]
         return now - round_data["start_time"] >= round_data["crash_time"]
 
     def verify_round(

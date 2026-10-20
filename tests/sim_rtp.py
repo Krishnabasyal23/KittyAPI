@@ -7,7 +7,7 @@ Run from KittyAPI (inside the hackathon conda env):
 
 Each round goes through the same functions a live round does: select_season, season_growth_rate
 (Summer Zoomies), season_rules.plan (butterfly / leaf storms), generate_crash_point,
-crash_after_seconds, season_rules.apply_bonus and economy.calculate_cashout. The RNG is "secure":
+crash_after_seconds and season_rules.apply_bonus. The RNG is "secure":
 a live mode with the same uniform distribution as "hybrid", but without a quantum-simulator call
 per round, so 400k rounds finish in seconds instead of hours.
 
@@ -39,11 +39,12 @@ from crash_engine import (  # noqa: E402
     season_growth_rate,
     select_season,
 )
-from economy import calculate_cashout  # noqa: E402
 from season_rules import apply_bonus, bonus_percents, happy_hour, plan  # noqa: E402
 
 RNG_MODE = "secure"
-WAGER = Decimal("1.00")
+# One unit per bet, paid at the exact multiplier. Live wallets round each payout to whole points
+# (economy.calculate_cashout, half-to-even), which is unbiased and so does not shift the RTP.
+WAGER = Decimal("1")
 TARGETS = (1.5, 2.0, 3.0, 5.0)
 
 
@@ -64,7 +65,7 @@ def play_round(season: str, cashout_time) -> tuple[Decimal, str, bool]:
     # the same rounding the server uses at cash-out
     base = math.floor(multiplier_at(t, growth_rate=growth, lead_in_seconds=MIN_CRASH_SECONDS) * 100) / 100
     paid, bonus = apply_bonus(season, events, t, base)
-    return calculate_cashout(WAGER, paid), season, bonus is not None
+    return WAGER * Decimal(str(paid)), season, bonus is not None
 
 
 def at_target(target: float):

@@ -24,7 +24,7 @@ def test_round_manager_refuses_non_live_modes(mode):
         manager.start_round(session_id, Decimal("10.00"), rng_mode=mode)
 
     # nothing was charged
-    assert manager.get_balance(session_id)["balance"] == "1000.00"
+    assert manager.get_balance(session_id)["balance"] == "50"
 
 
 def test_server_refuses_to_start_in_classical_mode():
