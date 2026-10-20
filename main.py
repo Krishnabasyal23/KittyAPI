@@ -13,11 +13,17 @@ from fastapi import (
     Query,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ConfigDict
 
 from database.connection import initialize_database
-from database.session_repository import SQLiteSessionStore
+from database.migrate import status as migration_status
+from database.wallet_store import WalletStore
+from economy import MAX_BET, MIN_BET
+from lottery import lottery_validator
+from payments import demo_mode, payment_provider
 from fairness import NotRevealedYet
+from errors import WalletError
 from randomness import LIVE_RNG_MODES
 from round_manager import RoundManager
 from crowd import CrowdTable, make_router as make_crowd_router
@@ -29,7 +35,7 @@ from season_rules import (
 )
 
 
-VERSION = "2.0.0-alpha.2"
+VERSION = "2.0.0-alpha.3"
 
 
 class StartRoundRequest(BaseModel):
@@ -45,6 +51,12 @@ def game_call(method, *args, **kwargs):
     try:
         return method(*args, **kwargs)
 
+    except WalletError as exc:
+        raise HTTPException(
+            status_code=exc.status,
+            detail=str(exc),
+        ) from exc
+
     except KeyError as exc:
         raise HTTPException(
             status_code=404,
@@ -58,7 +70,7 @@ def game_call(method, *args, **kwargs):
         ) from exc
 
 
-store = SQLiteSessionStore()
+store = WalletStore()
 
 manager = RoundManager(
     session_store=store,
@@ -66,7 +78,7 @@ manager = RoundManager(
 )
 
 # Crowd mode: phones in the room bet on the same cat (see crowd.py)
-crowd = CrowdTable(manager)
+crowd = CrowdTable(manager, store)
 
 
 @asynccontextmanager
@@ -118,7 +130,7 @@ app.add_middleware(
     allow_origins=CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "X-Session-ID"],
+    allow_headers=["Content-Type", "X-Session-ID", "Idempotency-Key"],
 )
 
 app.include_router(make_crowd_router(crowd))
@@ -127,6 +139,13 @@ SessionHeader = Annotated[
     str,
     Header(alias="X-Session-ID", min_length=1),
 ]
+
+IdempotencyHeader = Annotated[
+    str | None,
+    Header(alias="Idempotency-Key"),
+]
+
+DEMO_NOTICE = "DEMO MODE: payments are simulated and lottery tickets are mock tickets"
 
 
 @app.get("/api/health")
@@ -139,6 +158,11 @@ def health():
         "bonus_pct": bonus_percents(),
         "happy_hour": happy_hour(),
         "promo": HAPPY_HOUR_LABEL if happy_hour() else None,
+        "min_bet": str(MIN_BET),
+        "max_bet": str(MAX_BET),
+        "db_schema": max(migration_status()["applied"], default=0),
+        "demo_mode": demo_mode(),
+        "demo_notice": DEMO_NOTICE if demo_mode() else None,
     }
 
 
@@ -270,3 +294,66 @@ def leaderboard(
     limit: int = Query(10, ge=1, le=100),
 ):
     return store.get_leaderboard(limit)
+
+
+# WALLET (points; X-Session-ID is the wallet id: PC session or phone player id)
+
+class PurchaseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    product: str = Field(description="topup_5 or parking_5")
+
+
+class TicketRedeemRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ticket_id: str = Field(max_length=40)
+    numbers: str = Field(max_length=40, description="five two-digit numbers, e.g. '01 02 04 08 16'")
+
+
+class TicketIssueRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    numbers: str | None = Field(None, max_length=40)
+
+
+@app.get("/api/wallet")
+def wallet(session_id: SessionHeader):
+    """Balance, today's reward availability, products, lottery allowance and limits."""
+    return game_call(store.wallet_summary, session_id, demo=demo_mode())
+
+
+@app.get("/api/wallet/ledger")
+def wallet_ledger(session_id: SessionHeader, limit: int = Query(50, ge=1, le=200)):
+    game_call(store.balance, session_id)
+    return store.get_ledger(session_id, limit)
+
+
+@app.get("/api/wallet/receipts")
+def wallet_receipts(session_id: SessionHeader, limit: int = Query(50, ge=1, le=200)):
+    game_call(store.balance, session_id)
+    return store.get_receipts(session_id, limit)
+
+
+@app.post("/api/wallet/daily-free")
+def claim_daily_free(session_id: SessionHeader, idempotency_key: IdempotencyHeader = None):
+    return game_call(store.claim_daily_free, session_id, idempotency_key)
+
+
+@app.post("/api/wallet/purchase")
+def purchase(payload: PurchaseRequest, session_id: SessionHeader, idempotency_key: IdempotencyHeader = None):
+    """Simulated purchase (DEMO_MODE=1 only). Idempotency-Key is required."""
+    receipt = game_call(store.purchase, session_id, payload.product, payment_provider(), idempotency_key)
+    if receipt["status"] != "succeeded":
+        return JSONResponse(status_code=402, content=receipt)
+    return receipt
+
+
+@app.post("/api/wallet/lottery/redeem")
+def redeem_ticket(payload: TicketRedeemRequest, session_id: SessionHeader,
+                  idempotency_key: IdempotencyHeader = None):
+    return game_call(store.redeem_lottery_ticket, session_id, payload.ticket_id, payload.numbers,
+                     lottery_validator(demo_mode()), idempotency_key)
+
+
+@app.post("/api/demo/lottery/tickets", status_code=201)
+def issue_mock_ticket(payload: TicketIssueRequest | None = None):
+    """Print a mock ticket for local demos and tests (DEMO_MODE=1 only). Not a real lottery ticket."""
+    return game_call(store.issue_mock_ticket, lottery_validator(demo_mode()), payload.numbers if payload else None)

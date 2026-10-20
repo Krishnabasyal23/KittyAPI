@@ -7,7 +7,7 @@ def test_create_session():
 
     session = manager.create_session()
 
-    assert session["balance"] == "1000.00"
+    assert session["balance"] == "50"
     assert session["session_id"] in manager.sessions
 
 def test_start_round(monkeypatch):
@@ -16,9 +16,9 @@ def test_start_round(monkeypatch):
     manager = RoundManager()
     session = manager.create_session()
     session_id = session["session_id"]
-    result = manager.start_round(session_id, Decimal("100.00"))
+    result = manager.start_round(session_id, Decimal("10"))
     assert result["status"] == "running"
-    assert result["balance"] == "900.00"
+    assert result["balance"] == "40"
     assert "crash_point" not in result
 
 def test_successful_cashout(monkeypatch):
@@ -27,39 +27,39 @@ def test_successful_cashout(monkeypatch):
     manager = RoundManager( clock=lambda: clock[0])
     session = manager.create_session()
     session_id = session["session_id"]
-    round_data = manager.start_round(session_id, Decimal("100.00"))
+    round_data = manager.start_round(session_id, Decimal("10"))
     round_id = round_data["round_id"]
     # Advance the clock by five second.
     clock[0] += 5.0
     result = manager.cash_out(session_id, round_id)
     assert result["status"] == "cashed_out"
-    assert result["payout"] == "127.00"
-    assert result["balance"] == "1027.00"
+    assert result["payout"] == "13"
+    assert result["balance"] == "53"
 
 def test_duplicate_cashout(monkeypatch):
     monkeypatch.setattr("round_manager.draw_crash_point", lambda mode: (2.0, None))
     clock = [100.0]
     manager = RoundManager(clock=lambda: clock[0])
     session_id = manager.create_session()["session_id"]
-    round_id = manager.start_round(session_id, Decimal("100.00"))["round_id"]
+    round_id = manager.start_round(session_id, Decimal("10"))["round_id"]
     clock[0] += 5.0
     first = manager.cash_out(session_id, round_id)
     second = manager.cash_out(session_id, round_id)
     assert first["payout"] == second["payout"]
-    assert manager.get_balance(session_id)["balance"] == "1027.00"
+    assert manager.get_balance(session_id)["balance"] == "53"
 
 def test_crashed_round(monkeypatch):
     monkeypatch.setattr("round_manager.draw_crash_point", lambda mode: (2.0, None))
     clock = [100.0]
     manager = RoundManager(clock=lambda: clock[0])
     session_id = manager.create_session()["session_id"]
-    round_id = manager.start_round(session_id, Decimal("100.00"))["round_id"]
+    round_id = manager.start_round(session_id, Decimal("10"))["round_id"]
     # Advance beyond the 2x crash deadline.
     clock[0] += 10.0
     result = manager.cash_out(session_id, round_id)
     assert result["status"] == "crashed"
-    assert result["payout"] == "0.00"
-    assert result["balance"] == "900.00"
+    assert result["payout"] == "0"
+    assert result["balance"] == "40"
 
 def test_round_lifecycle():
     clock = [100.0]
@@ -69,11 +69,11 @@ def test_round_lifecycle():
     session_id = session["session_id"]
 
     with (patch("round_manager.draw_crash_point", return_value=(3.0, None)), patch("round_manager.select_distraction", return_value="fish")):
-        round_data = manager.start_round(session_id, Decimal("100.00"))
+        round_data = manager.start_round(session_id, Decimal("10"))
 
     round_id = round_data["round_id"]
 
-    assert round_data["balance"] == "900.00"
+    assert round_data["balance"] == "40"
     assert round_data["status"] == "running"
 
     clock[0] += 5.0
@@ -85,14 +85,14 @@ def test_round_lifecycle():
     result = manager.cash_out(session_id, round_id)
 
     assert result["status"] == "cashed_out"
-    assert result["payout"] == "127.00"
-    assert result["balance"] == "1027.00"
+    assert result["payout"] == "13"
+    assert result["balance"] == "53"
 
     duplicate = manager.cash_out(session_id, round_id)
 
-    assert duplicate["payout"] == "127.00"
+    assert duplicate["payout"] == "13"
 
-    assert manager.get_balance(session_id)["balance"] == "1027.00"
+    assert manager.get_balance(session_id)["balance"] == "53"
 
 def test_seasonal_round_lifecycle(monkeypatch):
     monkeypatch.setattr(
@@ -112,7 +112,7 @@ def test_seasonal_round_lifecycle(monkeypatch):
 
     started = manager.start_round(
         session_id,
-        Decimal("100.00")
+        Decimal("10")
     )
     round_id = started["round_id"]
 
@@ -133,5 +133,5 @@ def test_seasonal_round_lifecycle(monkeypatch):
     result = manager.cash_out(session_id, round_id)
 
     assert result["status"] == "cashed_out"
-    assert result["payout"] == "127.00"
-    assert result["balance"] == "1027.00"
+    assert result["payout"] == "13"
+    assert result["balance"] == "53"

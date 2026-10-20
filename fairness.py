@@ -20,6 +20,7 @@ The JSON field names match QuantumProof in the Unity client (Assets/KittyCrash/S
 """
 
 import hashlib
+import json
 import secrets
 
 from crash_engine import HOUSE_EDGE, MAX_MULTIPLIER
@@ -70,6 +71,49 @@ def public_reveal(proof: dict | None, crash_point: float) -> dict | None:
         out["classical_mask"] = str(proof["classical_mask"])
     out["crash_point_exact"] = crash_point
     return out
+
+
+# Persistence (migration 0003): one column per proof field, so /verify works after a restart.
+
+PROOF_COLUMNS = {
+    "scheme": "proof_scheme",
+    "commitment": "proof_commitment",
+    "salt": "proof_salt",
+    "value": "proof_value",
+    "bits": "proof_bits",
+    "qubits": "proof_qubits",
+    "source": "proof_source",
+    "quantum_samples": "proof_quantum_samples",
+    "classical_mask": "proof_classical_mask",
+    "house_edge": "proof_house_edge",
+    "max_multiplier": "proof_max_multiplier",
+}
+
+
+def proof_to_columns(proof: dict | None) -> dict:
+    if not proof:
+        return {}
+    cols = {column: proof.get(field) for field, column in PROOF_COLUMNS.items()}
+    cols["proof_value"] = str(proof["value"])   # 36-bit integers and repr() floats both as text
+    if proof.get("quantum_samples") is not None:
+        cols["proof_quantum_samples"] = json.dumps(list(proof["quantum_samples"]))
+    if proof.get("classical_mask") is not None:
+        cols["proof_classical_mask"] = str(proof["classical_mask"])
+    return cols
+
+
+def proof_from_columns(row: dict) -> dict | None:
+    """Rebuild exactly what make_proof() returned, from a rounds row."""
+    if not row.get("proof_commitment"):
+        return None
+    proof = {field: row.get(column) for field, column in PROOF_COLUMNS.items()}
+    if proof["scheme"] == "value":
+        proof["value"] = int(proof["value"])
+    if proof["quantum_samples"] is not None:
+        proof["quantum_samples"] = json.loads(proof["quantum_samples"])
+    if proof["classical_mask"] is not None:
+        proof["classical_mask"] = int(proof["classical_mask"])
+    return proof
 
 
 def verify(round_id: str, reveal: dict, crash_point: float, published_commitment: str | None = None) -> dict:

@@ -460,12 +460,12 @@
 
         <div id="betBox" class="card" style="display:flex;flex-direction:column;gap:10px">
             <div class="chips">
+                <button class="chip" data-v="1">1</button>
+                <button class="chip on" data-v="5">5</button>
                 <button class="chip" data-v="10">10</button>
-                <button class="chip on" data-v="50">50</button>
-                <button class="chip" data-v="100">100</button>
-                <button class="chip" data-v="250">250</button>
+                <button class="chip" data-v="25">25</button>
             </div>
-            <button class="big go" id="betBtn">BET 50</button>
+            <button class="big go" id="betBtn">BET 5</button>
         </div>
 
         <button class="big cash hidden" id="cashBtn">CASH OUT</button>
@@ -484,7 +484,7 @@
     <script>
         const $ = id => document.getElementById(id);
         let pid = localStorage.getItem("kc_pid") || "";
-        let wager = 50, s = null, recvAt = 0, lastPhase = "", busy = false, lastRound = -1;
+        let wager = 5, s = null, recvAt = 0, lastPhase = "", busy = false, lastRound = -1;
 
         const SEASON_ICON = { spring: "🌸", summer: "☀️", fall: "🍂", winter: "❄️" };
         const BONUS_ICON = { butterfly: "🦋", cocoa: "☕" };
@@ -506,7 +506,8 @@
         $("name").value = localStorage.getItem("kc_name") || "";
         $("joinBtn").onclick = async () => {
             try {
-                const j = await api("/api/crowd/join", { name: $("name").value });
+                // send the saved id so this phone gets its own wallet (and points) back
+                const j = await api("/api/crowd/join", { name: $("name").value, player_id: localStorage.getItem("kc_pid") || null });
                 pid = j.player_id; localStorage.setItem("kc_pid", pid); localStorage.setItem("kc_name", j.name);
                 show();
             } catch (e) { $("joinErr").textContent = e.message }
@@ -537,10 +538,17 @@
             $("gameView").classList.toggle("hidden", !pid);
         }
 
+        async function rejoin() {
+            try {
+                const j = await api("/api/crowd/join", { name: localStorage.getItem("kc_name") || "", player_id: pid });
+                pid = j.player_id; localStorage.setItem("kc_pid", pid);
+            } catch (e) { pid = ""; localStorage.removeItem("kc_pid"); show(); }
+        }
+
         async function poll() {
             try {
                 const j = await api("/api/crowd/state?player_id=" + encodeURIComponent(pid));
-                if (pid && j.you === null) { pid = ""; localStorage.removeItem("kc_pid"); show(); }   // server restarted
+                if (pid && j.you === null) await rejoin();   // server restarted: same wallet, same points
                 s = j; recvAt = performance.now(); render();
             } catch (e) { $("phaseText").textContent = "Can't reach the game - same Wi-Fi?" }
         }

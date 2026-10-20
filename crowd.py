@@ -5,7 +5,6 @@ import socket
 import threading
 import uuid
 
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -13,10 +12,10 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
 from crash_engine import SEASON_GROWTH, MIN_CRASH_SECONDS, multiplier_at
-from economy import MIN_BET, MAX_BET, calculate_cashout
+from economy import MIN_BET, MAX_BET, calculate_cashout, validate_points
+from errors import WalletError
 from season_rules import describe as describe_season, live as season_live, apply_bonus as season_bonus, bonus_percents, COCOA_LINE
 
-START_CREDITS = Decimal("1000.00")
 MAX_PLAYERS = 60
 HTML_FILE = Path(__file__).resolve().parent / "crowd.html"
 ASSET_DIR = Path(__file__).resolve().parent / "crowd_assets"   # cat1.png ... cat6.png (the phone's cat)
@@ -57,9 +56,23 @@ def _round_multiplier(rd: dict, elapsed: float) -> float:
     ) * 100) / 100
 
 
+def _wallet_call(method, *args):
+    """Run a wallet operation, turning wallet errors into HTTP errors for the phones."""
+    try:
+        return method(*args)
+    except WalletError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Player not found - join again") from exc
+
+
 class CrowdTable:
-    def __init__(self, manager):
+    """Phones bet on the big screen's walk. Points live in persistent 'phone' wallets (the store is
+    the source of truth); this table only keeps the live round state and a cached balance."""
+
+    def __init__(self, manager, store=None):
         self.manager = manager
+        self.store = store if store is not None else manager._session_store
         self.clock = manager._clock
         self.lock = threading.RLock()
         self.players = {}           # player_id -> dict
@@ -113,6 +126,8 @@ class CrowdTable:
             self.round = rd
             self.round_no += 1
             self.phase = "running"
+            riding = [p["bet_id"] for p in self.players.values() if p["bet"] is not None and p["cashed_at"] is None]
+            self.store.attach_crowd_bets(riding, rd["round_id"])
             self._tick()
 
     def _require_host(self, session_id: str):
@@ -121,24 +136,39 @@ class CrowdTable:
 
     # ---------- players (phones) ----------
 
-    def join(self, name: str) -> dict:
+    def join(self, name: str, player_id: str | None = None) -> dict:
+        """Seat a phone. With a known player_id (saved on the phone) the same wallet comes back,
+        balance included, even after a server restart."""
         name = " ".join((name or "").split())[:12] or "Kitty fan"
         with self.lock:
+            if player_id and player_id in self.players:
+                p = self.players[player_id]
+                return {"player_id": player_id, "name": p["name"], "balance": p["balance"]}
+
+            wallet = self.store.get_wallet(player_id) if player_id else None
+            if wallet is not None and wallet["kind"] != "phone":
+                wallet = None                                   # never seat a PC wallet on a phone
             if len(self.players) >= MAX_PLAYERS:
                 raise HTTPException(status_code=400, detail="The room is full")
+
+            if wallet is not None:
+                pid, name = player_id, wallet["display_name"] or name
+            else:
+                pid = uuid.uuid4().hex
             taken = {p["name"].lower() for p in self.players.values()}
             base, n = name, 2
             while name.lower() in taken:
                 suffix = str(n)
                 name = base[: 12 - len(suffix)] + suffix
                 n += 1
-            pid = uuid.uuid4().hex
+            if wallet is None:
+                wallet = self.store.ensure_wallet(pid, "phone", name)
             self.players[pid] = {
-                "name": name, "balance": START_CREDITS,
-                "bet": None, "cashed_at": None, "payout": None,
+                "name": name, "balance": wallet["balance_points"],
+                "bet": None, "bet_id": None, "cashed_at": None, "payout": None,
                 "best": 0.0, "bonus": None,
             }
-            return {"player_id": pid, "name": name, "balance": float(START_CREDITS)}
+            return {"player_id": pid, "name": name, "balance": wallet["balance_points"]}
 
     def _player(self, pid: str) -> dict:
         p = self.players.get(pid or "")
@@ -148,9 +178,9 @@ class CrowdTable:
 
     def bet(self, pid: str, wager_text: str) -> dict:
         try:
-            wager = Decimal(str(wager_text)).quantize(Decimal("0.01"))
-        except (InvalidOperation, ValueError):
-            raise HTTPException(status_code=400, detail="Bad amount")
+            wager = validate_points(str(wager_text))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Bets are whole points")
         with self.lock:
             self._tick()
             p = self._player(pid)
@@ -159,14 +189,14 @@ class CrowdTable:
             if p["bet"] is not None:
                 raise HTTPException(status_code=400, detail="You already bet this round")
             if wager < MIN_BET or wager > MAX_BET:
-                raise HTTPException(status_code=400, detail=f"Bet {MIN_BET:.0f} to {MAX_BET:.0f}")
-            if wager > p["balance"]:
-                raise HTTPException(status_code=400, detail="Not enough credits")
-            p["balance"] -= wager
+                raise HTTPException(status_code=400, detail=f"Bet {MIN_BET} to {MAX_BET}")
+            bet_id = uuid.uuid4().hex
+            p["balance"] = _wallet_call(self.store.place_crowd_bet, pid, bet_id, wager)
             p["bet"] = wager
+            p["bet_id"] = bet_id
             p["cashed_at"] = None
             p["payout"] = None
-            return {"balance": float(p["balance"]), "bet": float(wager)}
+            return {"balance": p["balance"], "bet": wager}
 
     def cash_out(self, pid: str) -> dict:
         with self.lock:
@@ -180,13 +210,13 @@ class CrowdTable:
             base = _round_multiplier(self.round, elapsed)
             m, bonus = season_bonus(self.round.get("season") or "", self.round.get("events"), elapsed, base)
             payout = calculate_cashout(p["bet"], m)
+            p["balance"] = _wallet_call(self.store.settle_crowd_cashout, p["bet_id"], m, payout)
             p["bonus"] = bonus
             p["cashed_at"] = m
             p["payout"] = payout
-            p["balance"] += payout
             p["best"] = max(p["best"], m)
             return {"multiplier": m, "base_multiplier": base, "bonus": bonus,
-                    "payout": float(payout), "balance": float(p["balance"])}
+                    "payout": payout, "balance": p["balance"]}
 
     # ---------- the big-screen player ----------
 
@@ -219,9 +249,10 @@ class CrowdTable:
             elapsed = self.clock() - self.round["start_time"]
             if elapsed >= self.round["crash_time"]:
                 self.phase = "crashed"
+                self.store.settle_crowd_crash(self.round["round_id"])
                 for p in self.players.values():
                     if p["bet"] is not None and p["cashed_at"] is None:
-                        p["payout"] = Decimal("0.00")
+                        p["payout"] = 0
                 self.history = ([round(self.round["crash_point"], 2)] + self.history)[:10]
 
     def state(self, pid: str = None) -> dict:
@@ -334,6 +365,7 @@ class OpenBody(BaseModel):
 
 class JoinBody(BaseModel):
     name: str = Field("", max_length=40)
+    player_id: str | None = Field(None, max_length=64)   # saved on the phone: rejoin the same wallet
 
 
 class BetBody(BaseModel):
@@ -369,7 +401,7 @@ def make_router(table: CrowdTable) -> APIRouter:
 
     @r.post("/api/crowd/join")
     def join(body: JoinBody):
-        return table.join(body.name)
+        return table.join(body.name, body.player_id)
 
     @r.post("/api/crowd/bet")
     def bet(body: BetBody):
