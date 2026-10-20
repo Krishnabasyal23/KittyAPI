@@ -117,7 +117,7 @@ async def phone(client, stats, number, stop_at):
         if state and state["phase"] == "betting" and not you.get("bet"):
             target = random.uniform(1.2, 3.0)
             if await call(client, stats, "POST /api/crowd/bet", "POST", "/api/crowd/bet",
-                          json={"player_id": pid, "wager": str(random.randint(1, 20))}):
+                          json={"player_id": pid, "wager": str(random.randint(1, 5))}):
                 stats.bets += 1
 
         elif (
