@@ -3,6 +3,7 @@
 Run from KittyAPI (inside the hackathon conda env):
     python tests/sim_rtp.py                 # 400,000 rounds per scenario
     python tests/sim_rtp.py --rounds 20000  # quick check
+    python tests/sim_rtp.py --happy-hour    # with the HAPPY_HOUR=1 demo bonuses (+25% / +10%)
 
 Each round goes through the same functions a live round does: select_season, season_growth_rate
 (Summer Zoomies), season_rules.plan (butterfly / leaf storms), generate_crash_point,
@@ -10,8 +11,8 @@ crash_after_seconds, season_rules.apply_bonus and economy.calculate_cashout. The
 a live mode with the same uniform distribution as "hybrid", but without a quantum-simulator call
 per round, so 400k rounds finish in seconds instead of hours.
 
-Every bet is 1.00 credit; RTP = total paid / total wagered. Cash-out is assumed perfect: the player
-leaves at exactly the planned moment if the cat is still walking.
+Every bet is 1.00 credit; RTP = total paid / total wagered, shown with its 95% margin of error.
+Cash-out is assumed perfect: the player leaves at exactly the planned moment if the cat is still walking.
 """
 
 import argparse
@@ -39,7 +40,7 @@ from crash_engine import (  # noqa: E402
     select_season,
 )
 from economy import calculate_cashout  # noqa: E402
-from season_rules import apply_bonus, plan  # noqa: E402
+from season_rules import apply_bonus, bonus_percents, happy_hour, plan  # noqa: E402
 
 RNG_MODE = "secure"
 WAGER = Decimal("1.00")
@@ -81,6 +82,7 @@ def at_butterfly(events, _growth):
 
 def run(name: str, rounds: int, cashout_time, season=None) -> dict:
     paid = Decimal("0.00")
+    paid_sq = 0.0
     wins = bonuses = 0
     by_season = {}
     started = time.perf_counter()
@@ -89,6 +91,7 @@ def run(name: str, rounds: int, cashout_time, season=None) -> dict:
         s = season or select_season()
         payout, s, bonus = play_round(s, cashout_time)
         paid += payout
+        paid_sq += float(payout) ** 2
         wins += payout > 0
         bonuses += bonus
         row = by_season.setdefault(s, [0, Decimal("0.00")])
@@ -96,10 +99,13 @@ def run(name: str, rounds: int, cashout_time, season=None) -> dict:
         row[1] += payout
 
     wagered = WAGER * rounds
+    rtp = float(paid / wagered)
+    variance = max(0.0, paid_sq / rounds - rtp ** 2)
     return {
         "name": name,
         "rounds": rounds,
-        "rtp": float(paid / wagered),
+        "rtp": rtp,
+        "margin": 1.96 * math.sqrt(variance / rounds),
         "win_rate": wins / rounds,
         "bonus_rate": bonuses / rounds,
         "by_season": {s: float(p / (WAGER * n)) for s, (n, p) in sorted(by_season.items())},
@@ -110,7 +116,7 @@ def run(name: str, rounds: int, cashout_time, season=None) -> dict:
 def show(result: dict) -> None:
     seasons = "  ".join(f"{s} {r:6.2%}" for s, r in result["by_season"].items())
     print(
-        f"{result['name']:<34} RTP {result['rtp']:7.2%}   win {result['win_rate']:6.2%}"
+        f"{result['name']:<34} RTP {result['rtp']:7.2%} +/-{result['margin']:5.2%}   win {result['win_rate']:6.2%}"
         f"   bonus {result['bonus_rate']:6.2%}   ({result['seconds']:.0f}s)"
     )
     if len(result["by_season"]) > 1:
@@ -120,9 +126,15 @@ def show(result: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--rounds", type=int, default=400_000, help="rounds per scenario")
+    parser.add_argument("--happy-hour", action="store_true", help="simulate HAPPY_HOUR=1 demo bonuses")
     args = parser.parse_args()
+    if args.happy_hour:
+        os.environ["HAPPY_HOUR"] = "1"
 
+    pct = bonus_percents()
+    mode = "HAPPY HOUR (demo)" if happy_hour() else "standard"
     print(f"Catino RTP simulation: {args.rounds:,} rounds per scenario, RNG '{RNG_MODE}', wager {WAGER}")
+    print(f"Bonuses: {mode}, butterfly +{pct['butterfly']}%, cocoa +{pct['cocoa']}%")
     print("Theoretical base RTP (no season bonus): 96.00%\n")
 
     print("Fixed cash-out target, random season (as live):")
