@@ -58,13 +58,18 @@ Player endpoints take the wallet id in the `X-Session-ID` header: the PC session
 | GET | `/api/wallet/ledger` | Append-only ledger entries with `balance_after` |
 | GET | `/api/wallet/receipts` | Simulated payment receipts |
 | POST | `/api/wallet/daily-free` | +20 points, once per server calendar day (409 after) |
-| POST | `/api/wallet/purchase` | `{"product": "topup_5" \| "parking_5"}`, **Idempotency-Key required**, `DEMO_MODE=1` only. 402 with the receipt if declined |
+| POST | `/api/wallet/purchase` | `{"product": "topup_5" \| "parking_5", "confirmed": true}`, **Idempotency-Key required**, `DEMO_MODE=1` only. `confirmed` is the "simulated payment" checkbox. 402 with the receipt if declined |
 | POST | `/api/wallet/lottery/redeem` | `{"ticket_id", "numbers": "01 02 04 08 16"}`: +25 points, `DEMO_MODE=1` only |
 | POST | `/api/demo/lottery/tickets` | Issue a mock ticket (optional `{"numbers": ...}`), `DEMO_MODE=1` only |
+| POST | `/api/wallet/age-confirm` | `{"confirm": true}`: self-attested 19+ (no ID check). Required before any wager or purchase |
+| GET / PUT | `/api/wallet/limits` | Play-safe state and choices / `{"daily_spend_limit_points": n \| null, "reality_check_minutes": 15 \| 30 \| 60}` |
+| POST | `/api/wallet/cool-off` | `{"hours": 1 \| 24 \| 168, "confirm": true}`: pause wagers and purchases; extend only |
+| POST | `/api/wallet/self-exclude` | `{"days": 30 \| 180 \| 365, "confirm": true}`: block wagers and purchases; cannot be undone early |
+| GET | `/api/wallet/activity?since=ISO` | Bets, points wagered / won and net since a moment (reality check) |
 | GET | `/api/leaderboard` | Top balances |
 | GET | `/crowd` | Phone page (crowd mode, up to 60 phones) |
 | POST | `/api/crowd/host`, `/api/crowd/open` | Big screen: become host, open betting |
-| POST | `/api/crowd/join`, `/api/crowd/bet`, `/api/crowd/cashout` | Phone actions |
+| POST | `/api/crowd/join`, `/api/crowd/bet`, `/api/crowd/cashout` | Phone actions (join takes `player_id` to rejoin and `age_confirmed` from the 19+ box) |
 | GET | `/api/crowd/state` | Shared table state (phones poll this) |
 
 Interactive docs: `http://127.0.0.1:8000/docs`.
@@ -94,10 +99,15 @@ Interactive docs: `http://127.0.0.1:8000/docs`.
   server, and that the numbers match it. Same numbers on different tickets are fine; each
   ticket id redeems once. `lottery.LotteryValidator` is replaceable. These aren't real lottery
   tickets and nothing here validates real ones.
-- **Responsible-gambling hooks** (backend only, the UI comes in Phase 3): `responsible.WalletPolicy`
-  is consulted before every wager and purchase. `DefaultPolicy` enforces self-exclusion,
-  cool-off and a daily spend limit from `rg_settings` (a blocked wager returns 403). Reality-check
-  interval and age confirmation are stored for the clients.
+- **Play safe (responsible gambling):** `responsible.WalletPolicy` is consulted before every wager
+  and purchase. A blocked request returns 403 and moves nothing. `DefaultPolicy` enforces:
+  - the 19+ self-attestation;
+  - self-exclusion (30/180/365 days) and cool-off (1 h / 1 day / 7 days), both extend-only;
+  - the daily spend limit on net wagers. A first or lower limit applies now; raising or removing
+    it waits 24 hours (migration 0006).
+
+  The clients show a reality check every 15/30/60 minutes (the player's choice) using
+  `/api/wallet/activity`. The phone page and the game's wallet panel are the UI.
 - **Crowd mode:** phones play from persistent `phone` wallets. A phone that saved its `player_id`
   rejoins the same wallet after a restart, and bets still open or riding at a restart are refunded.
 
@@ -131,6 +141,7 @@ python -m database.migrate status REM which migrations the v2 database has
 python tests\sim_rtp.py           REM 400k-round RTP per cash-out target and season strategy
 python tests\sim_rtp.py --happy-hour  REM same with the HAPPY_HOUR demo bonuses
 python tests\load_test.py         REM real server on 8001 + 60 fake phones, reports errors and latency
+python tests\phone_ui_test.py     REM real /crowd page in headless Chrome (needs Chrome), PASS/FAIL per step
 ```
 
 If numpy crashes on import with `0xc06d007f`, the env is not activated: use `conda activate hackathon`,
