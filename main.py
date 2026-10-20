@@ -301,6 +301,7 @@ def leaderboard(
 class PurchaseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     product: str = Field(description="topup_5 or parking_5")
+    confirmed: bool = Field(False, description="the player ticked 'I understand this is a simulated payment'")
 
 
 class TicketRedeemRequest(BaseModel):
@@ -339,7 +340,9 @@ def claim_daily_free(session_id: SessionHeader, idempotency_key: IdempotencyHead
 
 @app.post("/api/wallet/purchase")
 def purchase(payload: PurchaseRequest, session_id: SessionHeader, idempotency_key: IdempotencyHeader = None):
-    """Simulated purchase (DEMO_MODE=1 only). Idempotency-Key is required."""
+    """Simulated purchase (DEMO_MODE=1 only). Idempotency-Key and confirmed=true are required."""
+    if not payload.confirmed:
+        raise HTTPException(status_code=400, detail="Tick the box to confirm this simulated payment")
     receipt = game_call(store.purchase, session_id, payload.product, payment_provider(), idempotency_key)
     if receipt["status"] != "succeeded":
         return JSONResponse(status_code=402, content=receipt)
@@ -357,3 +360,74 @@ def redeem_ticket(payload: TicketRedeemRequest, session_id: SessionHeader,
 def issue_mock_ticket(payload: TicketIssueRequest | None = None):
     """Print a mock ticket for local demos and tests (DEMO_MODE=1 only). Not a real lottery ticket."""
     return game_call(store.issue_mock_ticket, lottery_validator(demo_mode()), payload.numbers if payload else None)
+
+
+# RESPONSIBLE GAMBLING (rules enforced in WalletStore; see responsible.py)
+
+class Confirm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm: bool = False
+
+
+class LimitsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    daily_spend_limit_points: int | None = Field(None, description="null removes the limit (after 24 h)")
+    reality_check_minutes: int | None = None
+
+
+class CoolOffRequest(Confirm):
+    hours: int
+
+
+class SelfExcludeRequest(Confirm):
+    days: int
+
+
+def _confirmed(payload: Confirm, what: str) -> None:
+    if not payload.confirm:
+        raise HTTPException(status_code=400, detail=f"Confirm to {what}")
+
+
+@app.get("/api/wallet/limits")
+def get_limits(session_id: SessionHeader):
+    return game_call(store.responsible_view, session_id)
+
+
+@app.put("/api/wallet/limits")
+def put_limits(payload: LimitsRequest, session_id: SessionHeader):
+    """Lowering the daily limit applies now; raising or removing it applies after 24 hours."""
+    if "daily_spend_limit_points" in payload.model_fields_set:
+        game_call(store.set_spend_limit, session_id, payload.daily_spend_limit_points)
+    if payload.reality_check_minutes is not None:
+        game_call(store.set_reality_check, session_id, payload.reality_check_minutes)
+    return game_call(store.responsible_view, session_id)
+
+
+@app.post("/api/wallet/age-confirm")
+def age_confirm(payload: Confirm, session_id: SessionHeader):
+    """Self-attested 19+ confirmation (no ID check). Required before any wager or purchase."""
+    _confirmed(payload, "that you are 19 or older")
+    game_call(store.confirm_age, session_id)
+    return game_call(store.responsible_view, session_id)
+
+
+@app.post("/api/wallet/cool-off")
+def cool_off(payload: CoolOffRequest, session_id: SessionHeader):
+    """Pause play and purchases. Can be extended, never shortened."""
+    _confirmed(payload, "start a cool-off")
+    game_call(store.start_cool_off, session_id, payload.hours)
+    return game_call(store.responsible_view, session_id)
+
+
+@app.post("/api/wallet/self-exclude")
+def self_exclude(payload: SelfExcludeRequest, session_id: SessionHeader):
+    """Block play and purchases for 30, 180 or 365 days. Cannot be undone early."""
+    _confirmed(payload, "self-exclude")
+    game_call(store.self_exclude, session_id, payload.days)
+    return game_call(store.responsible_view, session_id)
+
+
+@app.get("/api/wallet/activity")
+def activity(session_id: SessionHeader, since: str = Query(..., max_length=40)):
+    """Bets, points wagered / won and net since `since` (ISO-8601), for the reality check."""
+    return game_call(store.activity, session_id, since)

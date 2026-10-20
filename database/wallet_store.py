@@ -12,7 +12,7 @@ Rules every write follows:
 import json
 import re
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from hashlib import sha256
 from math import isfinite
@@ -31,7 +31,21 @@ from errors import (
 )
 from lottery import MOCK_NOTICE, TICKET_DAILY_MAX, TICKET_POINTS, LotteryValidator
 from payments import PRODUCTS, SIMULATED_NOTICE, PaymentProvider
-from responsible import DefaultPolicy, RGSettings, WalletPolicy, utc_now
+from responsible import (
+    COOL_OFF_HOURS,
+    DEFAULT_REALITY_CHECK_MINUTES,
+    LIMIT_INCREASE_DELAY,
+    MAX_DAILY_LIMIT,
+    MIN_AGE,
+    REALITY_CHECK_MINUTES,
+    SELF_EXCLUSION_DAYS,
+    DefaultPolicy,
+    RGSettings,
+    WalletPolicy,
+    effective,
+    parse_time,
+    utc_now,
+)
 
 from .connection import get_connection
 
@@ -46,7 +60,8 @@ def server_day() -> str:
 
 
 RG_FIELDS = ("daily_spend_limit_points", "cool_off_until", "self_excluded_until",
-             "reality_check_minutes", "age_confirmed_at")
+             "reality_check_minutes", "age_confirmed_at",
+             "pending_daily_spend_limit_points", "pending_limit_effective_at")
 
 
 class WalletStore:
@@ -100,8 +115,10 @@ class WalletStore:
     # RESPONSIBLE GAMBLING (policy hooks; settings are edited by the Phase 3 UI)
 
     def _rg(self, conn, wallet_id: str) -> RGSettings:
+        """Settings in force now (a pending limit change whose 24 h are over counts as applied)."""
         row = conn.execute("SELECT * FROM rg_settings WHERE wallet_id = ?", (wallet_id,)).fetchone()
-        return RGSettings(**{f: row[f] for f in RG_FIELDS}) if row else RGSettings()
+        stored = RGSettings(**{f: row[f] for f in RG_FIELDS}) if row else RGSettings()
+        return effective(stored, self.now())
 
     def _spent_today(self, conn, wallet_id: str) -> int:
         """Net points wagered today (wagers minus refunds)."""
@@ -127,23 +144,155 @@ class WalletStore:
             conn.close()
 
     def set_rg_settings(self, wallet_id: str, **fields) -> RGSettings:
-        """Upsert settings (None clears a field). Backend entry point for the Phase 3 controls."""
+        """Low-level upsert with no rules (None clears a field): operators and tests only.
+        Players go through confirm_age / set_spend_limit / start_cool_off / self_exclude."""
         unknown = set(fields) - set(RG_FIELDS)
         if unknown:
             raise ValueError(f"Unknown setting(s): {sorted(unknown)}")
         with self._write() as conn:
-            current = self._rg(conn, wallet_id).__dict__ | fields
-            conn.execute(
-                f"""
-                INSERT INTO rg_settings(wallet_id, {', '.join(RG_FIELDS)}, updated_at)
-                VALUES (?, {', '.join('?' for _ in RG_FIELDS)}, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-                ON CONFLICT(wallet_id) DO UPDATE SET
-                    {', '.join(f'{f} = excluded.{f}' for f in RG_FIELDS)},
-                    updated_at = excluded.updated_at
+            return self._save_rg(conn, wallet_id, self._rg(conn, wallet_id).__dict__ | fields)
+
+    def _save_rg(self, conn, wallet_id: str, current: dict) -> RGSettings:
+        conn.execute(
+            f"""
+            INSERT INTO rg_settings(wallet_id, {', '.join(RG_FIELDS)}, updated_at)
+            VALUES (?, {', '.join('?' for _ in RG_FIELDS)}, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            ON CONFLICT(wallet_id) DO UPDATE SET
+                {', '.join(f'{f} = excluded.{f}' for f in RG_FIELDS)},
+                updated_at = excluded.updated_at
+            """,
+            (wallet_id, *(current[f] for f in RG_FIELDS)),
+        )
+        return self._rg(conn, wallet_id)
+
+    # Player controls (the rules live here, not in the UI)
+
+    def confirm_age(self, wallet_id: str) -> RGSettings:
+        """Record the player's own 19+ confirmation (self-attested; no ID check). Kept from the first time."""
+        with self._write() as conn:
+            self._require_wallet(conn, wallet_id)
+            current = self._rg(conn, wallet_id).__dict__
+            if not current["age_confirmed_at"]:
+                current["age_confirmed_at"] = self.now().isoformat()
+            return self._save_rg(conn, wallet_id, current)
+
+    def set_spend_limit(self, wallet_id: str, points: int | None) -> RGSettings:
+        """Lower (or set a first) daily limit at once; raise or remove it only after 24 hours."""
+        if points is not None:
+            points = validate_points(points)
+            if not 1 <= points <= MAX_DAILY_LIMIT:
+                raise WalletError(f"Daily limit must be 1-{MAX_DAILY_LIMIT} points")
+        with self._write() as conn:
+            self._require_wallet(conn, wallet_id)
+            current = self._rg(conn, wallet_id).__dict__
+            limit = current["daily_spend_limit_points"]
+            if points is not None and (limit is None or points <= limit):
+                current["daily_spend_limit_points"] = points          # stricter: now
+                current["pending_daily_spend_limit_points"] = None
+                current["pending_limit_effective_at"] = None
+            elif points != limit:
+                current["pending_daily_spend_limit_points"] = points  # looser: in 24 hours
+                current["pending_limit_effective_at"] = (self.now() + LIMIT_INCREASE_DELAY).isoformat()
+            else:
+                current["pending_daily_spend_limit_points"] = None    # same as now: cancel any pending raise
+                current["pending_limit_effective_at"] = None
+            return self._save_rg(conn, wallet_id, current)
+
+    def set_reality_check(self, wallet_id: str, minutes: int) -> RGSettings:
+        if minutes not in REALITY_CHECK_MINUTES:
+            raise WalletError(f"Reality check every {', '.join(map(str, REALITY_CHECK_MINUTES))} minutes")
+        with self._write() as conn:
+            self._require_wallet(conn, wallet_id)
+            return self._save_rg(conn, wallet_id, self._rg(conn, wallet_id).__dict__ | {"reality_check_minutes": minutes})
+
+    def _extend_until(self, wallet_id: str, field: str, length: timedelta) -> RGSettings:
+        with self._write() as conn:
+            self._require_wallet(conn, wallet_id)
+            current = self._rg(conn, wallet_id).__dict__
+            until = self.now() + length
+            existing = parse_time(current[field])
+            if existing is None or existing < until:      # extend only, never shorten
+                current[field] = until.isoformat()
+            return self._save_rg(conn, wallet_id, current)
+
+    def start_cool_off(self, wallet_id: str, hours: int) -> RGSettings:
+        if hours not in COOL_OFF_HOURS:
+            raise WalletError(f"Cool-off lasts {', '.join(map(str, COOL_OFF_HOURS))} hours")
+        return self._extend_until(wallet_id, "cool_off_until", timedelta(hours=hours))
+
+    def self_exclude(self, wallet_id: str, days: int) -> RGSettings:
+        if days not in SELF_EXCLUSION_DAYS:
+            raise WalletError(f"Self-exclusion lasts {', '.join(map(str, SELF_EXCLUSION_DAYS))} days")
+        return self._extend_until(wallet_id, "self_excluded_until", timedelta(days=days))
+
+    def responsible_view(self, wallet_id: str) -> dict:
+        """Everything the responsible-gambling screens show, with the allowed choices."""
+        conn = self._connect()
+        try:
+            self._require_wallet(conn, wallet_id)
+            rg = self._rg(conn, wallet_id)
+            spent = self._spent_today(conn, wallet_id)
+        finally:
+            conn.close()
+        now = self.now()
+        cool, excluded = parse_time(rg.cool_off_until), parse_time(rg.self_excluded_until)
+        limit = rg.daily_spend_limit_points
+        return {
+            "age_confirmed": bool(rg.age_confirmed_at),
+            "min_age": MIN_AGE,
+            "daily_spend_limit_points": limit,
+            "spent_today": spent,
+            "remaining_today": None if limit is None else max(0, limit - spent),
+            "pending_limit": (
+                {"daily_spend_limit_points": rg.pending_daily_spend_limit_points,
+                 "effective_at": rg.pending_limit_effective_at}
+                if rg.pending_limit_effective_at else None
+            ),
+            "reality_check_minutes": rg.reality_check_minutes or DEFAULT_REALITY_CHECK_MINUTES,
+            "cooling_off_until": rg.cool_off_until if cool and now < cool else None,
+            "self_excluded_until": rg.self_excluded_until if excluded and now < excluded else None,
+            "can_play": bool(rg.age_confirmed_at) and not (cool and now < cool) and not (excluded and now < excluded),
+            "options": {
+                "cool_off_hours": list(COOL_OFF_HOURS),
+                "self_exclusion_days": list(SELF_EXCLUSION_DAYS),
+                "reality_check_minutes": list(REALITY_CHECK_MINUTES),
+                "limit_increase_delay_hours": int(LIMIT_INCREASE_DELAY.total_seconds() // 3600),
+            },
+        }
+
+    def activity(self, wallet_id: str, since: str) -> dict:
+        """What happened since `since` (ISO-8601 UTC, e.g. the server_time the client saw when it
+        started): for the reality check."""
+        start = parse_time(since)
+        if start is None:
+            raise WalletError("since must be an ISO-8601 time")
+        stamp = start.astimezone(utc_now().tzinfo).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        conn = self._connect()
+        try:
+            self._require_wallet(conn, wallet_id)
+            rows = conn.execute(
+                """
+                SELECT kind, COUNT(*) AS n, COALESCE(SUM(amount_points), 0) AS total
+                FROM ledger WHERE wallet_id = ? AND created_at >= ?
+                GROUP BY kind
                 """,
-                (wallet_id, *(current[f] for f in RG_FIELDS)),
-            )
-            return self._rg(conn, wallet_id)
+                (wallet_id, stamp),
+            ).fetchall()
+        finally:
+            conn.close()
+        by = {r["kind"]: (r["n"], r["total"]) for r in rows}
+        wagered = -by.get("wager", (0, 0))[1] - by.get("refund", (0, 0))[1]
+        won = by.get("payout", (0, 0))[1]
+        minutes = max(0, int((self.now() - start).total_seconds() // 60))
+        return {
+            "since": since,
+            "minutes": minutes,
+            "bets": by.get("wager", (0, 0))[0],
+            "wagered": wagered,
+            "won": won,
+            "net": won - wagered,
+            "server_time": self.now().isoformat(),
+        }
 
     # WALLETS
 
@@ -686,6 +835,8 @@ class WalletStore:
             "demo_mode": demo,
             "spent_today": spent,
             "limits": rg.__dict__,
+            "responsible": self.responsible_view(wallet_id),
+            "server_time": self.now().isoformat(),
         }
 
     # AUDIT
