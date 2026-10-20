@@ -23,6 +23,9 @@ from crowd import CrowdTable, make_router as make_crowd_router
 from season_rules import describe as describe_season
 
 
+VERSION = "2.0.0-alpha.1"
+
+
 class StartRoundRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -76,7 +79,7 @@ app = FastAPI(
         "Quantum-inspired crash game "
         "with persistent virtual credits."
     ),
-    version="0.2.0",
+    version=VERSION,
     lifespan=lifespan,
 )
 
@@ -125,7 +128,7 @@ def health():
     return {
         "status": "ok",
         "game": "Quantum Cat Crash",
-        "version": "0.2.0",
+        "version": VERSION,
         "rng_mode": GAME_RNG_MODE,
     }
 
