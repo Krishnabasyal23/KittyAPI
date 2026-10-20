@@ -76,6 +76,8 @@ async def big_screen(client, stats, stop_at):
     if session is None:
         return
     headers = {"X-Session-ID": session["session_id"]}
+    await call(client, stats, "POST /api/wallet/age-confirm", "POST", "/api/wallet/age-confirm",
+               json={"confirm": True}, headers=headers)
     await call(client, stats, "POST /api/crowd/host", "POST", "/api/crowd/host",
                json={"name": "Load Test"}, headers=headers)
 
@@ -103,7 +105,7 @@ async def big_screen(client, stats, stop_at):
 async def phone(client, stats, number, stop_at):
     await asyncio.sleep(random.random())  # people don't all scan the QR in the same millisecond
     joined = await call(client, stats, "POST /api/crowd/join", "POST", "/api/crowd/join",
-                        json={"name": f"Phone{number}"})
+                        json={"name": f"Phone{number}", "age_confirmed": True})
     if joined is None:
         return
     pid = joined["player_id"]

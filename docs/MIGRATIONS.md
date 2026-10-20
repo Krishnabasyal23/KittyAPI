@@ -31,6 +31,7 @@ that has the v1 schema.
 | 3 | `0003_round_fairness_proofs.sql` | fairness-seal columns on rounds |
 | 4 | `0004_responsible_gambling_settings.sql` | per-wallet responsible-gambling settings |
 | 5 | `0005_mock_lottery_tickets.sql` | server-issued mock lottery tickets |
+| 6 | `0006_rg_pending_limits.sql` | delayed daily-limit increases (pending value + effective time) |
 
 ## Rollback procedures
 
