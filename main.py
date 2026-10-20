@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 
 from database.connection import initialize_database
-from database.session_repository import SQLiteSessionStore
+from database.wallet_store import WalletStore
 from fairness import NotRevealedYet
 from randomness import LIVE_RNG_MODES
 from round_manager import RoundManager
@@ -58,7 +58,7 @@ def game_call(method, *args, **kwargs):
         ) from exc
 
 
-store = SQLiteSessionStore()
+store = WalletStore()
 
 manager = RoundManager(
     session_store=store,
