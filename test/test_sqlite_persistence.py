@@ -26,8 +26,8 @@ def test_cashout_persisted_exactly_once(
     store, db_path = setup_db
 
     monkeypatch.setattr(
-        "round_manager.generate_crash_point",
-        lambda mode: 2.0,
+        "round_manager.draw_crash_point",
+        lambda mode: (2.0, None),
     )
 
     clock = [100.0]
@@ -90,8 +90,8 @@ def test_crash_persists(setup_db, monkeypatch):
     store, _ = setup_db
 
     monkeypatch.setattr(
-        "round_manager.generate_crash_point",
-        lambda mode: 2.0,
+        "round_manager.draw_crash_point",
+        lambda mode: (2.0, None),
     )
 
     clock = [100.0]
@@ -126,8 +126,8 @@ def test_restart_refunds_pending_once(
     store, _ = setup_db
 
     monkeypatch.setattr(
-        "round_manager.generate_crash_point",
-        lambda mode: 2.0,
+        "round_manager.draw_crash_point",
+        lambda mode: (2.0, None),
     )
 
     mgr = RoundManager(session_store=store)

@@ -67,8 +67,8 @@ def test_round_start(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "round_manager.generate_crash_point",
-        lambda mode: 3.0
+        "round_manager.draw_crash_point",
+        lambda mode: (3.0, None)
     )
 
     monkeypatch.setattr(
