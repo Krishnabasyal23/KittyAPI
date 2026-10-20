@@ -35,7 +35,7 @@ from season_rules import (
 )
 
 
-VERSION = "2.0.0-alpha.3"
+VERSION = "2.0.0-alpha.4"
 
 
 class StartRoundRequest(BaseModel):
