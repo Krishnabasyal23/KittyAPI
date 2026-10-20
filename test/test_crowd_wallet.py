@@ -120,3 +120,15 @@ def test_restart_refunds_bets_still_in_play(table):
     assert store.recover_interrupted_rounds() == 2  # the host round and the phone bet
     assert store.balance(pid) == 50
     assert store.audit() == []
+
+
+def test_phone_sees_wallet_rewards_at_once():
+    import main
+    from fastapi.testclient import TestClient
+
+    client = TestClient(main.app)
+    joined = client.post("/api/crowd/join", json={"name": "Rewardy", "age_confirmed": True}).json()
+    pid = joined["player_id"]
+    assert client.post("/api/wallet/daily-free", headers={"X-Session-ID": pid}).json()["balance"] == 70
+    you = client.get("/api/crowd/state", params={"player_id": pid}).json()["you"]
+    assert you["balance"] == 70

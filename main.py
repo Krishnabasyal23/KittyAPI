@@ -335,7 +335,9 @@ def wallet_receipts(session_id: SessionHeader, limit: int = Query(50, ge=1, le=2
 
 @app.post("/api/wallet/daily-free")
 def claim_daily_free(session_id: SessionHeader, idempotency_key: IdempotencyHeader = None):
-    return game_call(store.claim_daily_free, session_id, idempotency_key)
+    result = game_call(store.claim_daily_free, session_id, idempotency_key)
+    crowd.sync_balance(session_id)
+    return result
 
 
 @app.post("/api/wallet/purchase")
@@ -344,6 +346,7 @@ def purchase(payload: PurchaseRequest, session_id: SessionHeader, idempotency_ke
     if not payload.confirmed:
         raise HTTPException(status_code=400, detail="Tick the box to confirm this simulated payment")
     receipt = game_call(store.purchase, session_id, payload.product, payment_provider(), idempotency_key)
+    crowd.sync_balance(session_id)
     if receipt["status"] != "succeeded":
         return JSONResponse(status_code=402, content=receipt)
     return receipt
@@ -352,8 +355,10 @@ def purchase(payload: PurchaseRequest, session_id: SessionHeader, idempotency_ke
 @app.post("/api/wallet/lottery/redeem")
 def redeem_ticket(payload: TicketRedeemRequest, session_id: SessionHeader,
                   idempotency_key: IdempotencyHeader = None):
-    return game_call(store.redeem_lottery_ticket, session_id, payload.ticket_id, payload.numbers,
-                     lottery_validator(demo_mode()), idempotency_key)
+    result = game_call(store.redeem_lottery_ticket, session_id, payload.ticket_id, payload.numbers,
+                       lottery_validator(demo_mode()), idempotency_key)
+    crowd.sync_balance(session_id)
+    return result
 
 
 @app.post("/api/demo/lottery/tickets", status_code=201)

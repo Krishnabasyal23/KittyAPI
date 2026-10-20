@@ -175,6 +175,14 @@ class CrowdTable:
             }
             return {"player_id": pid, "name": name, "balance": wallet["balance_points"]}
 
+    def sync_balance(self, pid: str) -> None:
+        """Re-read a seated phone's balance after a wallet change outside the table
+        (daily reward, simulated purchase, lottery ticket). No-op for anyone else."""
+        with self.lock:
+            p = self.players.get(pid or "")
+            if p is not None:
+                p["balance"] = self.store.balance(pid)
+
     def _player(self, pid: str) -> dict:
         p = self.players.get(pid or "")
         if p is None:
