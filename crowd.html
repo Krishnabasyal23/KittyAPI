@@ -487,7 +487,9 @@
         let wager = 50, s = null, recvAt = 0, lastPhase = "", busy = false, lastRound = -1;
 
         const SEASON_ICON = { spring: "🌸", summer: "☀️", fall: "🍂", winter: "❄️" };
-        const BONUS_ICON = { butterfly: "🦋 +25%", cocoa: "☕ +10%" };
+        const BONUS_ICON = { butterfly: "🦋", cocoa: "☕" };
+        // bonus size comes from the server (season_rules.bonus_factors); blank if an older server does not say
+        function pct(kind) { const v = s && s.bonus_pct ? s.bonus_pct[kind] : null; return v == null ? "" : "+" + v + "%"; }
         let lastButterfly = false;
 
         function esc(t) { return String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])) }
@@ -525,7 +527,7 @@
 
         $("cashBtn").onclick = async () => {
             if (busy) return; busy = true;
-            try { const j = await api("/api/crowd/cashout", { player_id: pid }); $("msg").textContent = `Cashed out at ${j.multiplier.toFixed(2)}x${j.bonus ? "  (" + BONUS_ICON[j.bonus] + ")" : ""}  +${j.payout.toFixed(0)}`; buzz(j.bonus ? [60, 40, 60, 40, 160] : [40, 40, 80]); sfx("cashout"); if (j.bonus) setTimeout(() => sfx("bonus"), 250); poll(); }
+            try { const j = await api("/api/crowd/cashout", { player_id: pid }); $("msg").textContent = `Cashed out at ${j.multiplier.toFixed(2)}x${j.bonus ? "  (" + BONUS_ICON[j.bonus] + " " + pct(j.bonus) + ")" : ""}  +${j.payout.toFixed(0)}`; buzz(j.bonus ? [60, 40, 60, 40, 160] : [40, 40, 80]); sfx("cashout"); if (j.bonus) setTimeout(() => sfx("bonus"), 250); poll(); }
             catch (e) { $("msg").textContent = e.message }
             busy = false;
         };
@@ -620,7 +622,7 @@
                 const season = s.rules ? s.rules.season : "";
                 const gold = s.phase === "running" && (s.butterfly || (season === "winter" && m >= s.cocoa_line));
                 $("cashBtn").classList.toggle("gold", gold);
-                $("cashBtn").textContent = s.butterfly ? "CASH OUT 🦋 +25%" : (season === "winter" && m >= s.cocoa_line && s.phase === "running") ? "CASH OUT ☕ +10%" : "CASH OUT";
+                $("cashBtn").textContent = s.butterfly ? "CASH OUT 🦋 " + pct("butterfly") : (season === "winter" && m >= s.cocoa_line && s.phase === "running") ? "CASH OUT ☕ " + pct("cocoa") : "CASH OUT";
             }
             requestAnimationFrame(frame);
         }
@@ -900,7 +902,7 @@
             } else if (s && s.phase === "running" && s.you && s.you.cashed_at > 0) {
                 banner("SAFE!  " + s.you.cashed_at.toFixed(2) + "x" + (s.you.bonus === "butterfly" ? " 🦋" : s.you.bonus === "cocoa" ? " ☕" : ""), "#4fe08a", dpr, W);
             } else if (s && s.phase === "running" && s.butterfly) {
-                banner("GOLDEN BUTTERFLY! +25%", "#ffd23c", dpr, W);
+                banner("GOLDEN BUTTERFLY! " + pct("butterfly"), "#ffd23c", dpr, W);
             } else if (s && s.phase === "running" && s.leaf_storm) {
                 banner("LEAF STORM! 🍂", "#ff9a3c", dpr, W);
             } else if (s && s.phase === "running" && s.rush && walkTime() >= s.warmup && Math.floor(now / 300) % 2) {

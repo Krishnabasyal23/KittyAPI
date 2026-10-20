@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from crash_engine import SEASON_GROWTH, MIN_CRASH_SECONDS, multiplier_at
 from economy import MIN_BET, MAX_BET, calculate_cashout
-from season_rules import describe as describe_season, live as season_live, apply_bonus as season_bonus, COCOA_LINE
+from season_rules import describe as describe_season, live as season_live, apply_bonus as season_bonus, bonus_percents, COCOA_LINE
 
 START_CREDITS = Decimal("1000.00")
 MAX_PLAYERS = 60
@@ -247,6 +247,7 @@ class CrowdTable:
                 "butterfly": False,
                 "leaf_storm": False,
                 "cocoa_line": COCOA_LINE,
+                "bonus_pct": bonus_percents(),   # phones label bonuses with what the server really pays
             }
             if self.phase == "betting":
                 # live: if the game screen changes next walk's season (key N), phones see it at once
