@@ -142,9 +142,10 @@ def crash_from_uniform(
     )
 
 
-def generate_crash_point(
+def draw_crash_point(
     mode: str = "hybrid"
-) -> float:
+) -> tuple[float, dict]:
+    """The crash point plus the random draw it came from (sealed by fairness.py)."""
 
     result = generate_random(
         mode=mode,
@@ -152,7 +153,14 @@ def generate_crash_point(
         samples=6
     )
 
-    return crash_from_uniform(result["normalized"])
+    return crash_from_uniform(result["normalized"]), result
+
+
+def generate_crash_point(
+    mode: str = "hybrid"
+) -> float:
+
+    return draw_crash_point(mode)[0]
 
 
 def multiplier_at(
