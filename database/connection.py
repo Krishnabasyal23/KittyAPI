@@ -5,6 +5,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DB_PATH = ROOT / "data" / "kittycat.db"
+# The v1 demo database. v2 code must never migrate or write it (see database/migrate.py).
+V1_DB_PATH = ROOT / "data" / "kittycat.db"
 # Tests, scripts and the v2 server point this at their own file so the v1 data is never touched.
 DB_PATH = Path(os.getenv("KITTY_DB_PATH") or DEFAULT_DB_PATH)
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
