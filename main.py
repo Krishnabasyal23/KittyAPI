@@ -78,7 +78,7 @@ manager = RoundManager(
 )
 
 # Crowd mode: phones in the room bet on the same cat (see crowd.py)
-crowd = CrowdTable(manager)
+crowd = CrowdTable(manager, store)
 
 
 @asynccontextmanager
