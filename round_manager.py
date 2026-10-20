@@ -24,6 +24,7 @@ from economy import (
 )
 
 from database.session_repository import from_cents
+from randomness import LIVE_RNG_MODES
 from season_rules import (
     plan as plan_season_events,
     live as season_live,
@@ -228,6 +229,9 @@ class RoundManager:
         wager: Decimal,
         rng_mode: str = "hybrid",
     ) -> dict:
+        if rng_mode not in LIVE_RNG_MODES:
+            raise ValueError(f"RNG mode '{rng_mode}' is not allowed for live rounds")
+
         wager = validate_money(wager)
 
         with self._lock:

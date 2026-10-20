@@ -4,3 +4,24 @@ __pycache__/
 data/*.db
 data/*.db-wal
 data/*.db-shm
+*.db-journal
+
+# Any database file, anywhere (v1 data and v2 test/temp databases stay local)
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets and certificates
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.keystore
+certs/
+
+# Tool output and scratch space
+*.log
+.tmp/
+.pytest_cache/
+web/

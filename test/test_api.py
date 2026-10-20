@@ -89,3 +89,7 @@ def test_round_start(monkeypatch):
     assert response.status_code == 201
     assert response.json()["balance"] == "900.00"
     assert "crash_point" not in response.json()
+
+
+def test_health_reports_version():
+    assert client.get("/api/health").json()["version"] == main.VERSION

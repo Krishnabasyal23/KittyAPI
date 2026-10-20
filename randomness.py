@@ -6,6 +6,10 @@ from qrng import generate_quantum_number
 
 RNGMode = Literal["classical", "secure", "quantum", "hybrid"]
 
+# Only these may decide real rounds. "classical" is seeded (predictable) and "quantum" is a bare
+# simulator draw, so both are for tests and offline experiments only.
+LIVE_RNG_MODES = frozenset({"hybrid", "secure"})
+
 prng = random.Random(2026)
 
 def classical_rng(bits: int = 36) -> int:
