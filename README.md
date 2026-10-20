@@ -1,9 +1,9 @@
 # KittyAPI: Catino game server
 
 FastAPI server for **Catino**, a crash game where the "crash" is the cat getting distracted.
-The server is the source of truth: it decides crash points, seasons, bonuses and payouts
-(Decimal credits, payout = wager × multiplier, server clock only). The Unity game and the
-phones (crowd mode) only display what it says.
+The server is the source of truth: it decides crash points, seasons, bonuses, payouts and
+wallet balances (server clock only). The Unity game and the phones (crowd mode) only display
+what it says.
 
 ## Run
 
@@ -12,25 +12,23 @@ Requires the `hackathon` conda env (`environment.yml`: Python 3.13, FastAPI, Qis
 ```bat
 conda activate hackathon
 cd D:\hhh\catt\KittyAPI
-uvicorn main:app --host 0.0.0.0 --port 8000
+uvicorn main:app --host 0.0.0.0 --port 8001
 ```
 
 Or double-click `start_server.bat` in the Unity project root. `--host 0.0.0.0` lets phones on
 the same Wi-Fi reach `/crowd`. Optional: `pip install segno` so the game can draw the join QR code.
 
-**v1 and v2 side by side:** the v1 demo runs on port **8000** with `data/kittycat.db`. Run v2 on
-port **8001** with its own database:
-
-```bat
-set KITTY_DB_PATH=D:\hhh\catt\.tmp\v2\kittycat-v2.db
-uvicorn main:app --host 0.0.0.0 --port 8001
-```
+**v1 and v2 side by side:** v2 runs on port **8001** with its own database
+(`data/catino-v2.db`, created and migrated at start-up; see [docs/MIGRATIONS.md](docs/MIGRATIONS.md)).
+The v1 demo runs from the `v1.0-pitch` tag on port **8000** with `data/kittycat.db`, which v2
+code never opens.
 
 ## Environment variables
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `KITTY_DB_PATH` | `data/kittycat.db` | SQLite file for sessions, rounds and the ledger. Point tests, scripts and v2 elsewhere. |
+| `KITTY_DB_PATH` | `data/catino-v2.db` | v2 SQLite file (wallets, ledger, rounds, receipts). Tests and scripts use their own files under `.tmp`. The v1 file is refused. |
+| `DEMO_MODE` | unset | `1` (exactly) enables **simulated** purchases (FakePayment, no money moves) and **mock** lottery tickets. Off: those endpoints answer 503. `/api/health` shows `demo_mode` and a notice. |
 | `HAPPY_HOUR` | unset | `1` (exactly) restores the demo season bonuses: butterfly +25%, cocoa +10%. Default is +4% for both, which keeps every strategy under 100% RTP. `/api/health` then shows `"promo": "HAPPY HOUR (demo)"`. Demos only. |
 | `GAME_RNG_MODE` | `hybrid` | `hybrid` (simulated quantum XOR `secrets`) or `secure` (`secrets` only). Any other value, including the seeded `classical` mode, stops the server at start-up. |
 | `CORS_ORIGINS` | localhost dev ports | Comma-separated browser origins allowed to call the API. |
@@ -39,22 +37,30 @@ uvicorn main:app --host 0.0.0.0 --port 8001
 
 ## Endpoints
 
-Player endpoints take the session in the `X-Session-ID` header.
+Player endpoints take the wallet id in the `X-Session-ID` header: the PC session id, or a phone's
+`player_id`. Balances, wagers and payouts are **whole points**, returned as text (`"50"`).
 
 | Method | Path | What it does |
 |---|---|---|
 | GET | `/api/health` | Status, version, RNG mode, season bonus sizes, happy-hour flag |
-| POST | `/api/sessions` | New player session with starting credits |
-| POST | `/api/rounds` | Bet (`{"wager": "10.00"}`) and start a walk |
+| POST | `/api/sessions` | New PC wallet with the 50-point starting grant |
+| POST | `/api/rounds` | Bet whole points (`{"wager": "10"}`; `"10.00"` also accepted, `"2.5"` refused) and start a walk |
 | GET | `/api/rounds/{id}/state` | Live multiplier, phase, season events |
 | POST | `/api/rounds/{id}/cashout` | Cash out at the current multiplier (+ season bonus) |
 | GET | `/api/rounds/{id}/result` | Crash point, distraction and fairness proof once the cat is distracted |
 | GET | `/api/rounds/{id}/verify` | "Verify this round": revealed proof plus hash / math / qubit checks (409 until the crash) |
 | GET | `/api/rounds/{id}/season` | Season and event schedule for the game screen |
 | GET / POST | `/api/season/next` | Forecast / choose the next walk's season (host key N) |
-| GET | `/api/player/balance` | Current credits |
+| GET | `/api/player/balance` | Current points |
 | GET | `/api/player/history` | Recent rounds |
-| GET | `/api/player/transactions` | Credit ledger |
+| GET | `/api/player/transactions` | Ledger (v1 shape) |
+| GET | `/api/wallet` | Balance, daily reward / products / lottery availability, today's spend, limits |
+| GET | `/api/wallet/ledger` | Append-only ledger entries with `balance_after` |
+| GET | `/api/wallet/receipts` | Simulated payment receipts |
+| POST | `/api/wallet/daily-free` | +20 points, once per server calendar day (409 after) |
+| POST | `/api/wallet/purchase` | `{"product": "topup_5" \| "parking_5"}`, **Idempotency-Key required**, `DEMO_MODE=1` only. 402 with the receipt if declined |
+| POST | `/api/wallet/lottery/redeem` | `{"ticket_id", "numbers": "01 02 04 08 16"}`: +25 points, `DEMO_MODE=1` only |
+| POST | `/api/demo/lottery/tickets` | Issue a mock ticket (optional `{"numbers": ...}`), `DEMO_MODE=1` only |
 | GET | `/api/leaderboard` | Top balances |
 | GET | `/crowd` | Phone page (crowd mode, up to 60 phones) |
 | POST | `/api/crowd/host`, `/api/crowd/open` | Big screen: become host, open betting |
@@ -62,6 +68,38 @@ Player endpoints take the session in the `X-Session-ID` header.
 | GET | `/api/crowd/state` | Shared table state (phones poll this) |
 
 Interactive docs: `http://127.0.0.1:8000/docs`.
+
+## Wallet rules
+
+| Rule | Value | Enforced by |
+|---|---|---|
+| Starting grant | 50 points, once per wallet | partial unique index on the ledger |
+| Daily free | 20 points, once per server calendar day | unique index (wallet, kind, day) |
+| $5 demo top-up | 40 points, repeatable | simulated payment receipt + ledger |
+| $5 demo parking bundle | 60 points, once per day | unique index (wallet, kind, day) |
+| Mock lottery ticket | 25 points, max 3 per wallet per day, each ticket id once ever | `lottery_tickets` primary key |
+| Wager | 1-500 whole points, never more than the balance | guarded UPDATE + `CHECK (balance >= 0)` |
+| Payout | wager × multiplier (Decimal), rounded **half to even** to whole points | `economy.calculate_cashout` |
+
+- **Atomic:** each operation is one `BEGIN IMMEDIATE` transaction. The wallet update and its
+  ledger row are written together, and concurrent requests queue instead of racing.
+- **Append-only:** database triggers reject `UPDATE` and `DELETE` on `ledger`. `WalletStore.audit()`
+  checks that every balance equals its ledger chain.
+- **Idempotent:** send `Idempotency-Key` (8-100 chars). A retry returns the stored response with
+  `"replayed": true`. The same key with a different request gets 422.
+- **Simulated payments:** `FakePaymentProvider` never contacts a payment network. Every receipt says
+  `"simulated": true` with a notice. Real providers would implement `payments.PaymentProvider`.
+- **Mock lottery tickets:** five two-digit numbers, 01-99, each exactly double the previous one
+  (e.g. `01 02 04 08 16`). The server checks the pattern, that the ticket id was issued by this
+  server, and that the numbers match it. Same numbers on different tickets are fine; each
+  ticket id redeems once. `lottery.LotteryValidator` is replaceable. These aren't real lottery
+  tickets and nothing here validates real ones.
+- **Responsible-gambling hooks** (backend only, the UI comes in Phase 3): `responsible.WalletPolicy`
+  is consulted before every wager and purchase. `DefaultPolicy` enforces self-exclusion,
+  cool-off and a daily spend limit from `rg_settings` (a blocked wager returns 403). Reality-check
+  interval and age confirmation are stored for the clients.
+- **Crowd mode:** phones play from persistent `phone` wallets. A phone that saved its `player_id`
+  rejoins the same wallet after a restart, and bets still open or riding at a restart are refunded.
 
 ## Provably fair seal
 
@@ -80,7 +118,8 @@ Seasons never touch the sealed value: Summer Zoomies and season events use separ
 bonuses only raise the cash-out multiplier. The JSON matches `QuantumProof` in the Unity client
 (`Fairness.cs`), which runs the same checks in the quantum box (key Q).
 
-Proofs are kept in memory: rounds from before a server restart have no proof (`/verify` returns 404).
+Seals are stored with each round (migration 0003), so `/verify` works after a restart. A reloaded
+round stays sealed until its crash time on the wall clock. A refunded (interrupted) round opens at once.
 
 ## Tests and tools
 
@@ -88,6 +127,7 @@ Run from this folder with the env active. Tests always use a temp database, neve
 
 ```bat
 python -m pytest -q --basetemp=D:\hhh\catt\.tmp\pytest
+python -m database.migrate status REM which migrations the v2 database has
 python tests\sim_rtp.py           REM 400k-round RTP per cash-out target and season strategy
 python tests\sim_rtp.py --happy-hour  REM same with the HAPPY_HOUR demo bonuses
 python tests\load_test.py         REM real server on 8001 + 60 fake phones, reports errors and latency
