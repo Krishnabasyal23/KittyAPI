@@ -1,20 +1,41 @@
 
 import math
+import os
 import secrets
 
 _rng = secrets.SystemRandom()
 
-BUTTERFLY_BONUS = 1.25
 BUTTERFLY_SECONDS = 1.6
-COCOA_BONUS = 1.10
 COCOA_LINE = 2.0
 LEAF_STORM_SECONDS = 2.5
+
+# Season bonus multipliers. The default keeps every strategy under 100% RTP: the crash formula
+# returns 96%, and 0.96 x 1.04 = 99.84% even for a player who always takes the bonus
+# (see tests/sim_rtp.py). HAPPY_HOUR=1 restores the generous pitch-demo values (up to ~120% RTP),
+# for demos only.
+SAFE_BONUSES = {"butterfly": 1.04, "cocoa": 1.04}
+HAPPY_HOUR_BONUSES = {"butterfly": 1.25, "cocoa": 1.10}
+HAPPY_HOUR_LABEL = "HAPPY HOUR (demo)"
+
+
+def happy_hour() -> bool:
+    return os.getenv("HAPPY_HOUR", "").strip() == "1"
+
+
+def bonus_factors() -> dict:
+    return HAPPY_HOUR_BONUSES if happy_hour() else SAFE_BONUSES
+
+
+def bonus_percents() -> dict:
+    """{"butterfly": 4, "cocoa": 4}: what the screens should promise."""
+    return {k: round((f - 1.0) * 100) for k, f in bonus_factors().items()}
+
 
 RULES = {
     "spring": {
         "title": "Butterfly Catch",
         "axis": "timing",
-        "rule": "A golden butterfly flutters by once. Cash out while it's here: +25%!",
+        "rule": "A golden butterfly flutters by once. Cash out while it's here: +{butterfly}%!",
     },
     "summer": {
         "title": "Summer Zoomies",
@@ -29,13 +50,14 @@ RULES = {
     "winter": {
         "title": "Hot Cocoa",
         "axis": "patience",
-        "rule": "Slow, sleepy walk. Cash out at 2.00x or more: +10% cocoa bonus!",
+        "rule": "Slow, sleepy walk. Cash out at 2.00x or more: +{cocoa}% cocoa bonus!",
     },
 }
 
 
 def describe(season: str) -> dict:
-    info = RULES.get(season, {"title": "", "axis": "", "rule": ""})
+    info = dict(RULES.get(season, {"title": "", "axis": "", "rule": ""}))
+    info["rule"] = info["rule"].format(**bonus_percents())
     return {"season": season, **info}
 
 
@@ -74,10 +96,11 @@ def apply_bonus(season: str, events: dict | None, elapsed: float, multiplier: fl
     if events is None:
         return multiplier, None
 
+    factors = bonus_factors()
     if season == "spring" and _inside(events.get("butterfly"), elapsed):
-        factor, tag = BUTTERFLY_BONUS, "butterfly"
+        factor, tag = factors["butterfly"], "butterfly"
     elif season == "winter" and multiplier >= COCOA_LINE:
-        factor, tag = COCOA_BONUS, "cocoa"
+        factor, tag = factors["cocoa"], "cocoa"
     else:
         return multiplier, None
 

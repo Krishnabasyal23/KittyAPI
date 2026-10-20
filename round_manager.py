@@ -30,6 +30,7 @@ from season_rules import (
     plan as plan_season_events,
     live as season_live,
     apply_bonus as season_bonus,
+    bonus_percents,
 )
 
 
@@ -429,6 +430,7 @@ class RoundManager:
                 "rules_on": round_data.get("events") is not None,
                 "butterfly": list(butterfly),
                 "leaf_storms": storms,
+                "bonus_pct": bonus_percents(),
             }
 
     # CASH OUT
@@ -479,7 +481,7 @@ class RoundManager:
             current = multiplier_at(elapsed, growth_rate=round_data["growth_rate"], lead_in_seconds=round_data["lead_in_seconds"])
             cashout_multiplier = math.floor(current * 100) / 100
             base_multiplier = cashout_multiplier
-            # season bonus (butterfly +25% / cocoa +10%) is paid as a higher multiplier
+            # season bonus (butterfly / cocoa, see season_rules.bonus_factors) is paid as a higher multiplier
             cashout_multiplier, bonus = season_bonus(
                 round_data["season"], round_data.get("events"), elapsed, base_multiplier
             )

@@ -21,7 +21,12 @@ from fairness import NotRevealedYet
 from randomness import LIVE_RNG_MODES
 from round_manager import RoundManager
 from crowd import CrowdTable, make_router as make_crowd_router
-from season_rules import describe as describe_season
+from season_rules import (
+    HAPPY_HOUR_LABEL,
+    bonus_percents,
+    describe as describe_season,
+    happy_hour,
+)
 
 
 VERSION = "2.0.0-alpha.1"
@@ -131,6 +136,9 @@ def health():
         "game": "Quantum Cat Crash",
         "version": VERSION,
         "rng_mode": GAME_RNG_MODE,
+        "bonus_pct": bonus_percents(),
+        "happy_hour": happy_hour(),
+        "promo": HAPPY_HOUR_LABEL if happy_hour() else None,
     }
 
 
