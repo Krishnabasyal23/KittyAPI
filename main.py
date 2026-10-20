@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from database.connection import initialize_database
 from database.wallet_store import WalletStore
 from fairness import NotRevealedYet
+from errors import WalletError
 from randomness import LIVE_RNG_MODES
 from round_manager import RoundManager
 from crowd import CrowdTable, make_router as make_crowd_router
@@ -44,6 +45,12 @@ class StartRoundRequest(BaseModel):
 def game_call(method, *args, **kwargs):
     try:
         return method(*args, **kwargs)
+
+    except WalletError as exc:
+        raise HTTPException(
+            status_code=exc.status,
+            detail=str(exc),
+        ) from exc
 
     except KeyError as exc:
         raise HTTPException(

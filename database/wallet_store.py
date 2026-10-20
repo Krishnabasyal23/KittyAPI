@@ -18,6 +18,7 @@ from time import time as wall_clock
 from fairness import proof_to_columns
 from economy import INITIAL_BALANCE, MAX_BET, MIN_BET, calculate_cashout, validate_points
 from errors import InsufficientPoints, WalletError
+from responsible import DefaultPolicy, RGSettings, WalletPolicy, utc_now
 
 from .connection import get_connection
 
@@ -27,10 +28,16 @@ def server_day() -> str:
     return date.today().isoformat()
 
 
+RG_FIELDS = ("daily_spend_limit_points", "cool_off_until", "self_excluded_until",
+             "reality_check_minutes", "age_confirmed_at")
+
+
 class WalletStore:
-    def __init__(self, db_path=None, today=server_day):
+    def __init__(self, db_path=None, today=server_day, now=utc_now, policy: WalletPolicy | None = None):
         self.db_path = db_path
-        self.today = today
+        self.today = today          # server calendar day for daily rewards / limits
+        self.now = now              # UTC datetime for cool-off / self-exclusion
+        self.policy = policy or DefaultPolicy()
 
     def _connect(self):
         return get_connection(self.db_path)
@@ -72,6 +79,54 @@ class WalletStore:
     def _write(self):
         """Connection with an IMMEDIATE transaction already open (use as `with self._write() as conn`)."""
         return _Txn(self._connect())
+
+    # RESPONSIBLE GAMBLING (policy hooks; settings are edited by the Phase 3 UI)
+
+    def _rg(self, conn, wallet_id: str) -> RGSettings:
+        row = conn.execute("SELECT * FROM rg_settings WHERE wallet_id = ?", (wallet_id,)).fetchone()
+        return RGSettings(**{f: row[f] for f in RG_FIELDS}) if row else RGSettings()
+
+    def _spent_today(self, conn, wallet_id: str) -> int:
+        """Net points wagered today (wagers minus refunds)."""
+        return conn.execute(
+            """
+            SELECT COALESCE(-SUM(amount_points), 0) FROM ledger
+            WHERE wallet_id = ? AND day = ? AND kind IN ('wager', 'refund')
+            """,
+            (wallet_id, self.today()),
+        ).fetchone()[0]
+
+    def _check_wager(self, conn, wallet_id: str, points: int) -> None:
+        self.policy.check_wager(self._rg(conn, wallet_id), self._spent_today(conn, wallet_id), points, self.now())
+
+    def _check_purchase(self, conn, wallet_id: str) -> None:
+        self.policy.check_purchase(self._rg(conn, wallet_id), self.now())
+
+    def get_rg_settings(self, wallet_id: str) -> RGSettings:
+        conn = self._connect()
+        try:
+            return self._rg(conn, wallet_id)
+        finally:
+            conn.close()
+
+    def set_rg_settings(self, wallet_id: str, **fields) -> RGSettings:
+        """Upsert settings (None clears a field). Backend entry point for the Phase 3 controls."""
+        unknown = set(fields) - set(RG_FIELDS)
+        if unknown:
+            raise ValueError(f"Unknown setting(s): {sorted(unknown)}")
+        with self._write() as conn:
+            current = self._rg(conn, wallet_id).__dict__ | fields
+            conn.execute(
+                f"""
+                INSERT INTO rg_settings(wallet_id, {', '.join(RG_FIELDS)}, updated_at)
+                VALUES (?, {', '.join('?' for _ in RG_FIELDS)}, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                ON CONFLICT(wallet_id) DO UPDATE SET
+                    {', '.join(f'{f} = excluded.{f}' for f in RG_FIELDS)},
+                    updated_at = excluded.updated_at
+                """,
+                (wallet_id, *(current[f] for f in RG_FIELDS)),
+            )
+            return self._rg(conn, wallet_id)
 
     # WALLETS
 
@@ -151,6 +206,7 @@ class WalletStore:
             raise ValueError("Invalid crash time")
 
         with self._write() as conn:
+            self._check_wager(conn, session_id, wager)
             conn.execute(
                 """
                 INSERT INTO rounds(round_id, wallet_id, wager_points, status, crash_point,
