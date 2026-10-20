@@ -136,13 +136,16 @@ class CrowdTable:
 
     # ---------- players (phones) ----------
 
-    def join(self, name: str, player_id: str | None = None) -> dict:
+    def join(self, name: str, player_id: str | None = None, age_confirmed: bool = False) -> dict:
         """Seat a phone. With a known player_id (saved on the phone) the same wallet comes back,
-        balance included, even after a server restart."""
+        balance included, even after a server restart. age_confirmed records the player's 19+
+        confirmation (the phone's join checkbox); without it the phone can watch but not bet."""
         name = " ".join((name or "").split())[:12] or "Kitty fan"
         with self.lock:
             if player_id and player_id in self.players:
                 p = self.players[player_id]
+                if age_confirmed:
+                    self.store.confirm_age(player_id)
                 return {"player_id": player_id, "name": p["name"], "balance": p["balance"]}
 
             wallet = self.store.get_wallet(player_id) if player_id else None
@@ -163,12 +166,22 @@ class CrowdTable:
                 n += 1
             if wallet is None:
                 wallet = self.store.ensure_wallet(pid, "phone", name)
+            if age_confirmed:
+                self.store.confirm_age(pid)
             self.players[pid] = {
                 "name": name, "balance": wallet["balance_points"],
                 "bet": None, "bet_id": None, "cashed_at": None, "payout": None,
                 "best": 0.0, "bonus": None,
             }
             return {"player_id": pid, "name": name, "balance": wallet["balance_points"]}
+
+    def sync_balance(self, pid: str) -> None:
+        """Re-read a seated phone's balance after a wallet change outside the table
+        (daily reward, simulated purchase, lottery ticket). No-op for anyone else."""
+        with self.lock:
+            p = self.players.get(pid or "")
+            if p is not None:
+                p["balance"] = self.store.balance(pid)
 
     def _player(self, pid: str) -> dict:
         p = self.players.get(pid or "")
@@ -366,6 +379,7 @@ class OpenBody(BaseModel):
 class JoinBody(BaseModel):
     name: str = Field("", max_length=40)
     player_id: str | None = Field(None, max_length=64)   # saved on the phone: rejoin the same wallet
+    age_confirmed: bool = False                           # the 19+ checkbox on the join screen
 
 
 class BetBody(BaseModel):
@@ -401,7 +415,7 @@ def make_router(table: CrowdTable) -> APIRouter:
 
     @r.post("/api/crowd/join")
     def join(body: JoinBody):
-        return table.join(body.name, body.player_id)
+        return table.join(body.name, body.player_id, body.age_confirmed)
 
     @r.post("/api/crowd/bet")
     def bet(body: BetBody):

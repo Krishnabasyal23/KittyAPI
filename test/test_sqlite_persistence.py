@@ -34,6 +34,7 @@ def test_cashout_persisted_exactly_once(setup_db, monkeypatch):
     mgr = RoundManager(clock=lambda: clock[0], session_store=store)
 
     sid = mgr.create_session()["session_id"]
+    store.confirm_age(sid)
     rid = mgr.start_round(sid, Decimal("10"))["round_id"]
     assert store.get_session(sid)["balance"] == 40
 
@@ -79,6 +80,7 @@ def test_crash_persists(setup_db, monkeypatch):
     mgr = RoundManager(clock=lambda: clock[0], session_store=store)
 
     sid = mgr.create_session()["session_id"]
+    store.confirm_age(sid)
     rid = mgr.start_round(sid, Decimal("10"))["round_id"]
 
     clock[0] += 10
@@ -94,6 +96,7 @@ def test_restart_refunds_pending_once(setup_db, monkeypatch):
 
     mgr = RoundManager(session_store=store)
     sid = mgr.create_session()["session_id"]
+    store.confirm_age(sid)
     rid = mgr.start_round(sid, Decimal("10"))["round_id"]
 
     assert store.recover_interrupted_rounds() == 1
@@ -113,6 +116,7 @@ def test_failed_duplicate_round_rollback(setup_db):
     store, _ = setup_db
     sid = "session123"
     store.create_session(sid)
+    store.confirm_age(sid)
 
     store.record_wager(sid, "same-id", 10, 2.0, 3.0, "fish")
 
@@ -131,6 +135,7 @@ def test_failed_duplicate_round_rollback(setup_db):
 def test_wager_larger_than_balance_changes_nothing(setup_db):
     store, _ = setup_db
     store.create_session("pc1")
+    store.confirm_age("pc1")
 
     with pytest.raises(ValueError, match="Not enough points"):
         store.record_wager("pc1", "r1", 60, 2.0, 3.0, "fish")

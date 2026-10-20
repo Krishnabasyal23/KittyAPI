@@ -18,6 +18,7 @@ def store(tmp_path):
 def start(store, rng_mode="secure"):
     manager = RoundManager(session_store=store, season_rules=True)
     sid = manager.create_session()["session_id"]
+    store.confirm_age(sid)
     started = manager.start_round(sid, Decimal("5"), rng_mode=rng_mode)
     return manager, sid, started
 

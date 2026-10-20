@@ -16,9 +16,12 @@ def no_demo(monkeypatch):
     monkeypatch.delenv("DEMO_MODE", raising=False)
 
 
-def new_wallet():
+def new_wallet(adult=True):
     sid = client.post("/api/sessions").json()["session_id"]
-    return {"X-Session-ID": sid}
+    h = {"X-Session-ID": sid}
+    if adult:
+        assert client.post("/api/wallet/age-confirm", headers=h, json={"confirm": True}).status_code == 200
+    return h
 
 
 def test_new_session_is_a_50_point_wallet(no_demo):
@@ -45,28 +48,28 @@ def test_daily_free_endpoint(no_demo):
 
 def test_purchase_needs_demo_mode(no_demo):
     h = new_wallet() | {"Idempotency-Key": "buy-00000001"}
-    response = client.post("/api/wallet/purchase", headers=h, json={"product": "topup_5"})
+    response = client.post("/api/wallet/purchase", headers=h, json={"product": "topup_5", "confirmed": True})
     assert response.status_code == 503
 
 
 def test_purchase_needs_an_idempotency_key(demo):
-    response = client.post("/api/wallet/purchase", headers=new_wallet(), json={"product": "topup_5"})
+    response = client.post("/api/wallet/purchase", headers=new_wallet(), json={"product": "topup_5", "confirmed": True})
     assert response.status_code == 400 and "Idempotency-Key" in response.json()["detail"]
 
 
 def test_purchase_and_retry(demo):
     h = new_wallet() | {"Idempotency-Key": "buy-00000001"}
-    first = client.post("/api/wallet/purchase", headers=h, json={"product": "parking_5"})
+    first = client.post("/api/wallet/purchase", headers=h, json={"product": "parking_5", "confirmed": True})
     assert first.status_code == 200
     receipt = first.json()
     assert receipt["points"] == 60 and receipt["balance"] == 110 and receipt["simulated"] is True
 
-    retry = client.post("/api/wallet/purchase", headers=h, json={"product": "parking_5"})
+    retry = client.post("/api/wallet/purchase", headers=h, json={"product": "parking_5", "confirmed": True})
     assert retry.json() == {**receipt, "replayed": True}
     assert client.get("/api/wallet", headers=h).json()["balance"] == 110
 
     again = client.post("/api/wallet/purchase", headers=h | {"Idempotency-Key": "buy-00000002"},
-                        json={"product": "parking_5"})
+                        json={"product": "parking_5", "confirmed": True})
     assert again.status_code == 409
     assert len(client.get("/api/wallet/receipts", headers=h).json()) == 1
 
@@ -97,7 +100,7 @@ def test_lottery_off_without_demo_mode(no_demo):
 def test_ledger_shows_every_move(demo):
     h = new_wallet()
     client.post("/api/wallet/daily-free", headers=h)
-    client.post("/api/wallet/purchase", headers=h | {"Idempotency-Key": "buy-00000009"}, json={"product": "topup_5"})
+    client.post("/api/wallet/purchase", headers=h | {"Idempotency-Key": "buy-00000009"}, json={"product": "topup_5", "confirmed": True})
     ledger = client.get("/api/wallet/ledger", headers=h).json()
     assert [e["kind"] for e in ledger] == ["topup", "daily_free", "starting_grant"]
     assert [e["balance_after"] for e in ledger] == [110, 70, 50]

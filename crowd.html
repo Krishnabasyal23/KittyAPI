@@ -413,6 +413,137 @@
             cursor: pointer;
             background: #231f3a
         }
+
+        /* ---------- wallet, demo checkout, play-safe tools (Phase 3) ---------- */
+        .check {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 16px;
+            line-height: 1.3;
+            cursor: pointer
+        }
+
+        .check input {
+            width: 24px;
+            height: 24px;
+            flex: none;
+            margin: 0;
+            accent-color: var(--orange)
+        }
+
+        .sheet {
+            position: fixed;
+            inset: 0;
+            background: rgba(8, 6, 16, .72);
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            z-index: 50;
+            padding: 10px
+        }
+
+        .sheet.hidden {
+            display: none
+        }
+
+        .sheet .panel {
+            width: 100%;
+            max-width: 520px;
+            max-height: 92vh;
+            overflow: auto;
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px
+        }
+
+        .sheet h2 {
+            margin: 0;
+            font-size: 22px
+        }
+
+        .opt {
+            width: 100%;
+            padding: 14px;
+            font-size: 18px;
+            background: #2a2540;
+            color: var(--text);
+            border: 2px solid var(--line);
+            text-align: left
+        }
+
+        .opt.on {
+            border-color: var(--orange)
+        }
+
+        .ghost {
+            background: transparent;
+            color: var(--dim);
+            border: 2px solid var(--line);
+            padding: 12px;
+            font-size: 16px;
+            width: 100%
+        }
+
+        .demo {
+            border: 2px dashed var(--orange);
+            color: var(--orange);
+            border-radius: 14px;
+            padding: 10px;
+            font-size: 15px;
+            text-align: center
+        }
+
+        .warn {
+            border: 2px solid var(--red);
+            color: #ffd0d5;
+            border-radius: 14px;
+            padding: 10px;
+            font-size: 15px
+        }
+
+        .kv {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            font-size: 16px;
+            border-bottom: 1px solid var(--line);
+            padding: 6px 0
+        }
+
+        .tiny {
+            font-size: 12px;
+            color: var(--dim);
+            word-break: break-all
+        }
+
+        .grid3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px
+        }
+
+        .grid3 button {
+            padding: 12px 6px;
+            font-size: 16px;
+            background: #2a2540;
+            color: var(--text)
+        }
+
+        .grid3 button.on {
+            outline: 2px solid var(--orange)
+        }
+
+        #walletBtn {
+            background: #2a2540;
+            color: var(--text);
+            padding: 6px 12px;
+            font-size: 16px
+        }
     </style>
 </head>
 
@@ -431,7 +562,9 @@
         <div style="font-size:20px">Bet on the cat with everyone in the room. Cash out before kitty gets distracted!
         </div>
         <input id="name" maxlength="12" placeholder="Your name" autocomplete="off">
-        <button class="big go" id="joinBtn">JOIN THE GAME</button>
+        <label class="check"><input type="checkbox" id="ageOk"> I am 19 or older.</label>
+        <div class="dim">Points only, no real money. Play for fun and take breaks.</div>
+        <button class="big go" id="joinBtn" disabled>JOIN THE GAME</button>
         <div id="joinErr" class="dim" style="color:var(--red)"></div>
     </div>
 
@@ -440,7 +573,7 @@
         <div class="card" id="stage">
             <div class="row">
                 <div class="dim" id="me"></div>
-                <div class="bal" id="bal"></div>
+                <div class="row" style="gap:8px"><div class="bal" id="bal"></div><button id="walletBtn">👛 Wallet</button></div>
             </div>
             <canvas id="scene"></canvas>
             <div id="season" class="season hidden">
@@ -449,9 +582,6 @@
             </div>
             <div id="mult">1.00x</div>
             <div id="phaseText">Connecting…</div>
-            <div id="mood" data-mood="calm"><img id="moodImg" src="/crowd-assets/mood_calm.png" alt="">
-                <div><b id="moodLabel">Chillin'</b><span id="moodSub"></span></div>
-            </div>
             <div id="mood" data-mood="calm"><img id="moodImg" src="/crowd-assets/mood_calm.png" alt="">
                 <div><b id="moodLabel">Chillin'</b><span id="moodSub"></span></div>
             </div>
@@ -479,6 +609,12 @@
             <b>Leaderboard</b>
             <div class="list" id="board" style="margin-top:8px"></div>
         </div>
+        <button class="ghost" id="safeBtn">🛟 Play safe: limits, breaks, self-exclusion</button>
+    </div>
+
+    <!-- wallet / checkout / play-safe sheet -->
+    <div id="sheet" class="sheet hidden">
+        <div class="panel" id="sheetBody"></div>
     </div>
 
     <script>
@@ -507,12 +643,15 @@
         $("joinBtn").onclick = async () => {
             try {
                 // send the saved id so this phone gets its own wallet (and points) back
-                const j = await api("/api/crowd/join", { name: $("name").value, player_id: localStorage.getItem("kc_pid") || null });
+                if (!$("ageOk").checked) { $("joinErr").textContent = "You must be 19 or older to play."; return; }
+                localStorage.setItem("kc_age", "1");
+                const j = await api("/api/crowd/join", { name: $("name").value, player_id: localStorage.getItem("kc_pid") || null, age_confirmed: true });
                 pid = j.player_id; localStorage.setItem("kc_pid", pid); localStorage.setItem("kc_name", j.name);
                 show();
             } catch (e) { $("joinErr").textContent = e.message }
         };
         $("name").addEventListener("keydown", e => { if (e.key === "Enter") $("joinBtn").click() });
+        $("ageOk").onchange = () => { $("joinBtn").disabled = !$("ageOk").checked };
 
         document.querySelectorAll(".chip").forEach(b => b.onclick = () => {
             document.querySelectorAll(".chip").forEach(x => x.classList.remove("on")); b.classList.add("on");
@@ -540,7 +679,7 @@
 
         async function rejoin() {
             try {
-                const j = await api("/api/crowd/join", { name: localStorage.getItem("kc_name") || "", player_id: pid });
+                const j = await api("/api/crowd/join", { name: localStorage.getItem("kc_name") || "", player_id: pid, age_confirmed: localStorage.getItem("kc_age") === "1" });
                 pid = j.player_id; localStorage.setItem("kc_pid", pid);
             } catch (e) { pid = ""; localStorage.removeItem("kc_pid"); show(); }
         }
@@ -558,6 +697,7 @@
             const you = s.you || { bet: 0, cashed_at: 0, payout: 0, balance: 0, name: "" };
             const hasBet = you.bet > 0, cashed = you.cashed_at > 0;
             $("count").textContent = s.player_count + " playing";
+            if (window.walletOnState) walletOnState(s);
             $("me").textContent = you.name;
             $("bal").textContent = "🪙 " + Math.floor(you.balance);
 
@@ -932,6 +1072,221 @@
         (function sceneLoop(now) { drawScene(now); requestAnimationFrame(sceneLoop); })(performance.now());
 
         show(); poll(); setInterval(poll, 300); requestAnimationFrame(frame);
+    </script>
+    <script>
+        // ---------- wallet, demo checkout, mock tickets, play-safe tools (Phase 3) ----------
+        // Every rule (amounts, limits, 19+, cool-off) is enforced by the server; this only shows it.
+        let WAL = null, payKey = null, payMethod = "", rcStart = 0, rcNext = 0, oopRound = -1;
+
+        async function wapi(method, path, body, idem) {
+            const headers = { "X-Session-ID": pid };
+            if (body !== undefined) headers["Content-Type"] = "application/json";
+            if (idem) headers["Idempotency-Key"] = idem;
+            const r = await fetch(path, { method, headers, cache: "no-store", body: body === undefined ? undefined : JSON.stringify(body) });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok && r.status !== 402) throw new Error(j.detail || "Network problem");
+            return j;
+        }
+        function newKey() {
+            const k = crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2);
+            return "phone-" + k.replace(/[^A-Za-z0-9_.:-]/g, "");
+        }
+        function showPanel(html) { $("sheetBody").innerHTML = html; $("sheet").classList.remove("hidden"); }
+        function closePanel() { $("sheet").classList.add("hidden"); }
+        function panelOpen() { return !$("sheet").classList.contains("hidden"); }
+        function note(id, text, bad) { const el = $(id); if (el) { el.textContent = text; el.style.color = bad ? "var(--red)" : "var(--green)"; } }
+        const until = t => t ? new Date(t).toLocaleString() : "";
+        async function loadWallet() { WAL = await wapi("GET", "/api/wallet"); return WAL; }
+
+        // wallet home
+        async function openWallet() {
+            try { await loadWallet() } catch (e) { showPanel(`<h2>Wallet</h2><div class="warn">${esc(e.message)}</div><button class="ghost" onclick="closePanel()">Close</button>`); return; }
+            const packs = WAL.demo_mode ? WAL.products.map(p => `
+                <button class="opt" ${p.available ? "" : "disabled"} onclick="openPay('${p.product_id}')">
+                    ${esc(p.label)} · $${esc(p.price)} → <b>${p.points} points</b>${p.once_per_day ? " · once a day" : ""}<br>
+                    <span class="tiny">DEMO · simulated payment, no money moves${p.available ? "" : " · already bought today"}</span>
+                </button>`).join("") : `<div class="dim">Point packs are off on this server.</div>`;
+            const lottery = WAL.demo_mode ? `
+                <b>Mock lottery ticket</b>
+                <div class="tiny">${WAL.lottery.redeemed_today} of ${WAL.lottery.daily_max} today · ${WAL.lottery.points} points each · mock tickets only, not real lottery tickets</div>
+                <input id="tId" placeholder="Ticket id (MOCK-XXXX-XXXX-XXXX)" autocomplete="off" style="text-transform:uppercase">
+                <input id="tNums" placeholder="Numbers, e.g. 01 02 04 08 16" autocomplete="off" inputmode="numeric">
+                <button class="big go" ${WAL.lottery.available ? "" : "disabled"} onclick="redeemTicket()">REDEEM TICKET</button>
+                <div id="tMsg" class="dim"></div>` : "";
+            showPanel(`
+                <div class="row"><h2>👛 Wallet</h2><button class="ghost" style="width:auto" onclick="closePanel()">✕</button></div>
+                <div class="kv"><span>Balance</span><b>🪙 ${WAL.balance} points</b></div>
+                <button class="big go" ${WAL.daily_free.available ? "" : "disabled"} onclick="claimDaily()">
+                    ${WAL.daily_free.available ? "CLAIM " + WAL.daily_free.points + " FREE POINTS" : "FREE POINTS CLAIMED TODAY"}</button>
+                <div id="dMsg" class="dim"></div>
+                ${WAL.demo_mode ? '<div class="demo">DEMO MODE: payments are simulated. No real money is ever charged.</div>' : ""}
+                ${packs}
+                ${lottery}
+                <button class="ghost" onclick="openHistory()">🧾 Receipts &amp; history</button>
+                <button class="ghost" onclick="openSafe()">🛟 Play safe tools</button>`);
+        }
+
+        async function claimDaily() {
+            try { const r = await wapi("POST", "/api/wallet/daily-free", {}); note("dMsg", `+${r.points} points! Balance ${r.balance}`); sfx("bonus"); setTimeout(openWallet, 900); poll(); }
+            catch (e) { note("dMsg", e.message, true) }
+        }
+
+        async function redeemTicket() {
+            const ticket_id = ($("tId").value || "").trim().toUpperCase(), numbers = ($("tNums").value || "").trim();
+            try {
+                const r = await wapi("POST", "/api/wallet/lottery/redeem", { ticket_id, numbers }, newKey());
+                note("tMsg", `+${r.points} points for ${r.ticket_id} (${r.numbers}). Balance ${r.balance}`); sfx("bonus"); setTimeout(openWallet, 1200); poll();
+            } catch (e) { note("tMsg", e.message, true) }
+        }
+
+        // demo checkout: generic methods, explicit "simulated" checkbox, one idempotency key per checkout
+        function openPay(productId) {
+            const p = WAL.products.find(x => x.product_id === productId);
+            payKey = newKey(); payMethod = "";
+            showPanel(`
+                <div class="row"><h2>Demo checkout</h2><button class="ghost" style="width:auto" onclick="openWallet()">✕</button></div>
+                <div class="demo">SIMULATED PAYMENT · DEMO ONLY<br>No card is read and no real money is charged.</div>
+                <div class="kv"><span>${esc(p.label)}</span><b>$${esc(p.price)} ${esc(p.currency)}</b></div>
+                <div class="kv"><span>You get</span><b>${p.points} points</b></div>
+                <div class="dim">Pay with (demo)</div>
+                <button class="opt" id="m_wallet" onclick="pickMethod('wallet')">📱 Phone wallet (demo)</button>
+                <button class="opt" id="m_card" onclick="pickMethod('card')">💳 Card (demo)</button>
+                <label class="check"><input type="checkbox" id="payOk" onchange="payReady()"> I understand this is a simulated demo payment and no real money will be charged.</label>
+                <button class="big go" id="payBtn" disabled onclick="pay('${p.product_id}')">PAY $${esc(p.price)} (DEMO)</button>
+                <div id="payMsg" class="dim"></div>
+                <button class="ghost" onclick="openWallet()">Cancel</button>`);
+        }
+        function pickMethod(m) { payMethod = m; $("m_wallet").classList.toggle("on", m === "wallet"); $("m_card").classList.toggle("on", m === "card"); payReady(); }
+        function payReady() { $("payBtn").disabled = !($("payOk").checked && payMethod); }
+        async function pay(productId) {
+            $("payBtn").disabled = true;
+            try {
+                const r = await wapi("POST", "/api/wallet/purchase", { product: productId, confirmed: true }, payKey);
+                if (r.status !== "succeeded") { note("payMsg", "Demo payment declined. No points added.", true); $("payBtn").disabled = false; return; }
+                sfx("cashout"); poll(); showReceipt(r);
+            } catch (e) { note("payMsg", e.message, true); payReady(); }
+        }
+        function showReceipt(r) {
+            showPanel(`
+                <h2>🧾 Receipt (simulated)</h2>
+                <div class="demo">${esc(r.notice)}</div>
+                <div class="kv"><span>Item</span><b>${esc(r.label)}</b></div>
+                <div class="kv"><span>Price</span><b>$${esc(r.price)} ${esc(r.currency)}</b></div>
+                <div class="kv"><span>Points</span><b>+${r.points}</b></div>
+                <div class="kv"><span>Status</span><b>${esc(r.status)}</b></div>
+                <div class="kv"><span>Time</span><b>${esc(until(r.created_at))}</b></div>
+                <div class="tiny">Payment id ${esc(r.payment_id)} · provider ${esc(r.provider)}</div>
+                <button class="big go" onclick="openWallet()">BACK TO WALLET</button>`);
+        }
+
+        async function openHistory() {
+            try {
+                const [receipts, ledger] = await Promise.all([wapi("GET", "/api/wallet/receipts?limit=20"), wapi("GET", "/api/wallet/ledger?limit=30")]);
+                const LABEL = { starting_grant: "Welcome points", daily_free: "Daily free", topup: "Demo top-up", parking_bundle: "Demo parking bundle", lottery_ticket: "Mock lottery ticket", wager: "Bet", payout: "Cash-out", refund: "Refund" };
+                showPanel(`
+                    <div class="row"><h2>🧾 History</h2><button class="ghost" style="width:auto" onclick="openWallet()">✕</button></div>
+                    <b>Simulated receipts</b>
+                    ${receipts.length ? receipts.map(r => `<div class="kv"><span>${esc(r.label)} · ${esc(r.status)}<br><span class="tiny">${esc(until(r.created_at))}</span></span><b>+${r.points}</b></div>`).join("") : '<div class="dim">No purchases.</div>'}
+                    <b>Points ledger</b>
+                    ${ledger.map(e => `<div class="kv"><span>${esc(LABEL[e.kind] || e.kind)}<br><span class="tiny">${esc(until(e.created_at))}</span></span><b>${e.amount_points > 0 ? "+" : ""}${e.amount_points} → ${e.balance_after}</b></div>`).join("")}
+                    <button class="ghost" onclick="openWallet()">Back</button>`);
+            } catch (e) { showPanel(`<div class="warn">${esc(e.message)}</div><button class="ghost" onclick="closePanel()">Close</button>`) }
+        }
+
+        // play-safe tools: every change goes to the server, which applies the rules
+        async function openSafe() {
+            let v;
+            try { v = await wapi("GET", "/api/wallet/limits") } catch (e) { showPanel(`<div class="warn">${esc(e.message)}</div><button class="ghost" onclick="closePanel()">Close</button>`); return; }
+            const pending = v.pending_limit ? `<div class="dim">Change waiting: ${v.pending_limit.daily_spend_limit_points ?? "no limit"} from ${esc(until(v.pending_limit.effective_at))}</div>` : "";
+            const blocked = v.self_excluded_until ? `<div class="warn">Self-excluded until ${esc(until(v.self_excluded_until))}.</div>`
+                : v.cooling_off_until ? `<div class="warn">Taking a break until ${esc(until(v.cooling_off_until))}.</div>` : "";
+            showPanel(`
+                <div class="row"><h2>🛟 Play safe</h2><button class="ghost" style="width:auto" onclick="closePanel()">✕</button></div>
+                ${blocked}
+                <b>Daily spend limit</b>
+                <div class="dim">Now: ${v.daily_spend_limit_points ?? "none"} · spent today ${v.spent_today}${v.remaining_today != null ? " · " + v.remaining_today + " left" : ""}</div>
+                ${pending}
+                <input id="limitIn" type="number" min="1" inputmode="numeric" placeholder="Points per day">
+                <div class="grid3"><button onclick="saveLimit(false)">Set</button><button onclick="saveLimit(true)">Remove</button><button onclick="openSafe()">↻</button></div>
+                <div class="tiny">Lowering applies now. Raising or removing waits ${v.options.limit_increase_delay_hours} hours.</div>
+                <div id="limMsg" class="dim"></div>
+                <b>Reality check</b>
+                <div class="grid3">${v.options.reality_check_minutes.map(m => `<button class="${m === v.reality_check_minutes ? "on" : ""}" onclick="setReality(${m})">every ${m} min</button>`).join("")}</div>
+                <b>Take a break</b>
+                <label class="check"><input type="checkbox" id="coolOk"> Pause betting and purchases. It can't be shortened.</label>
+                <div class="grid3">${v.options.cool_off_hours.map(h => `<button onclick="coolOff(${h})">${h < 24 ? h + " hour" : h === 24 ? "1 day" : (h / 24) + " days"}</button>`).join("")}</div>
+                <b>Self-exclusion</b>
+                <div class="warn">Blocks all betting and purchases on this wallet for the whole period. It cannot be undone early.</div>
+                <label class="check"><input type="checkbox" id="exclOk"> I understand and want to self-exclude.</label>
+                <div class="grid3">${v.options.self_exclusion_days.map(d => `<button onclick="selfExclude(${d})">${d} days</button>`).join("")}</div>
+                <div id="safeMsg" class="dim"></div>
+                <div class="tiny">Need to talk to someone? ConnexOntario: 1-866-531-2600 (free, 24/7).</div>`);
+        }
+        async function saveLimit(remove) {
+            const n = parseInt($("limitIn").value, 10);
+            if (!remove && !(n > 0)) { note("limMsg", "Enter a number of points.", true); return; }
+            try { await wapi("PUT", "/api/wallet/limits", { daily_spend_limit_points: remove ? null : n }); openSafe(); }
+            catch (e) { note("limMsg", e.message, true) }
+        }
+        async function setReality(m) {
+            try { await wapi("PUT", "/api/wallet/limits", { reality_check_minutes: m }); rcNext = rcStart + m * 60000; openSafe(); }
+            catch (e) { note("safeMsg", e.message, true) }
+        }
+        async function coolOff(h) {
+            if (!$("coolOk").checked) { note("safeMsg", "Tick the box to start a break.", true); return; }
+            try { await wapi("POST", "/api/wallet/cool-off", { hours: h, confirm: true }); openSafe(); }
+            catch (e) { note("safeMsg", e.message, true) }
+        }
+        async function selfExclude(d) {
+            if (!$("exclOk").checked) { note("safeMsg", "Tick the box to self-exclude.", true); return; }
+            try { await wapi("POST", "/api/wallet/self-exclude", { days: d, confirm: true }); openSafe(); }
+            catch (e) { note("safeMsg", e.message, true) }
+        }
+
+        // out of points: offer the ways back, including a break
+        function walletOnState(st) {
+            const you = st.you;
+            if (!you || panelOpen() || st.phase !== "betting" || you.bet > 0 || you.balance >= 1 || oopRound === st.round_no) return;
+            oopRound = st.round_no;
+            loadWallet().then(() => showPanel(`
+                <h2>Out of points</h2>
+                <div class="dim">You can keep watching the walk. To play again:</div>
+                ${WAL.daily_free.available ? `<button class="big go" onclick="claimDaily()">CLAIM ${WAL.daily_free.points} FREE POINTS</button><div id="dMsg" class="dim"></div>` : '<div class="dim">Free points are back tomorrow.</div>'}
+                ${WAL.demo_mode ? '<button class="opt" onclick="openWallet()">Demo point packs or a mock ticket</button>' : ""}
+                <button class="opt" onclick="openSafe()">🛟 Take a break</button>
+                <button class="ghost" onclick="closePanel()">Just watch</button>`)).catch(() => { });
+        }
+
+        // reality check: every N minutes (the player's choice, default 15) with the server's numbers
+        async function startRealityCheck() {
+            try { await loadWallet() } catch (e) { return }
+            rcStart = Date.now(); rcNext = rcStart + WAL.responsible.reality_check_minutes * 60000;
+            const since = WAL.server_time;
+            setInterval(async () => {
+                if (!pid || Date.now() < rcNext) return;
+                try {
+                    const [act, v] = await Promise.all([wapi("GET", "/api/wallet/activity?since=" + encodeURIComponent(since)), wapi("GET", "/api/wallet/limits")]);
+                    rcNext = Date.now() + v.reality_check_minutes * 60000;
+                    showPanel(`
+                        <h2>⏰ Reality check</h2>
+                        <div class="kv"><span>Playing for</span><b>${act.minutes} minutes</b></div>
+                        <div class="kv"><span>Bets</span><b>${act.bets}</b></div>
+                        <div class="kv"><span>Points bet</span><b>${act.wagered}</b></div>
+                        <div class="kv"><span>Points won</span><b>${act.won}</b></div>
+                        <div class="kv"><span>Net</span><b>${act.net > 0 ? "+" : ""}${act.net}</b></div>
+                        <button class="big go" onclick="closePanel()">KEEP PLAYING</button>
+                        <button class="opt" onclick="openSafe()">🛟 Take a break</button>
+                        <button class="ghost" onclick="openHistory()">See my history</button>`);
+                } catch (e) { }
+            }, 20000);
+        }
+
+        $("walletBtn").onclick = openWallet;
+        $("bal").onclick = openWallet;
+        $("safeBtn").onclick = openSafe;
+        $("sheet").onclick = e => { if (e.target.id === "sheet") closePanel(); };
+        if (pid) startRealityCheck();
+        else $("joinBtn").addEventListener("click", () => setTimeout(() => { if (pid) startRealityCheck(); }, 800));
     </script>
 </body>
 

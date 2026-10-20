@@ -2,6 +2,29 @@
 
 All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0-alpha.4] - 2026-10-20
+
+Phase 3: wallet UI and play-safe tools.
+
+### Added
+- Play-safe endpoints: `/api/wallet/age-confirm`, `/api/wallet/limits` (GET/PUT), `/cool-off`,
+  `/self-exclude`, `/activity`. Each change needs an explicit `confirm`.
+- Migration 0006: a raised or removed daily spend limit waits 24 hours; lowering applies at once.
+- Phone page: 19+ checkbox on join, wallet sheet (daily points, demo packs, mock ticket entry),
+  demo checkout (generic methods, simulated-payment checkbox, receipts), history, play-safe sheet
+  (limit, reality check, cool-off, self-exclusion, helpline), out-of-points sheet, reality check.
+- `tests/phone_ui_test.py`: the phone page end to end in headless Chrome.
+
+### Changed
+- **19+ confirmation is required before any wager or purchase** (rewards and tickets stay open).
+- Simulated purchases also need `"confirmed": true` (the checkout checkbox).
+- Cool-off and self-exclusion can be extended but never shortened.
+- `/api/crowd/join` takes `age_confirmed`. Wallet rewards update a seated phone's balance at once.
+- `/api/health` reports version `2.0.0-alpha.4`.
+
+### Fixed
+- The phone page showed a second, never-updating mood box.
+
 ## [2.0.0-alpha.3] - 2026-10-20
 
 Phase 2: persistent wallet backend.
