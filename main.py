@@ -17,13 +17,19 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from database.connection import initialize_database
 from database.session_repository import SQLiteSessionStore
+from fairness import NotRevealedYet
 from randomness import LIVE_RNG_MODES
 from round_manager import RoundManager
 from crowd import CrowdTable, make_router as make_crowd_router
-from season_rules import describe as describe_season
+from season_rules import (
+    HAPPY_HOUR_LABEL,
+    bonus_percents,
+    describe as describe_season,
+    happy_hour,
+)
 
 
-VERSION = "2.0.0-alpha.1"
+VERSION = "2.0.0-alpha.2"
 
 
 class StartRoundRequest(BaseModel):
@@ -130,6 +136,9 @@ def health():
         "game": "Quantum Cat Crash",
         "version": VERSION,
         "rng_mode": GAME_RNG_MODE,
+        "bonus_pct": bonus_percents(),
+        "happy_hour": happy_hour(),
+        "promo": HAPPY_HOUR_LABEL if happy_hour() else None,
     }
 
 
@@ -187,6 +196,22 @@ def get_round_result(
         session_id,
         round_id,
     )
+
+
+@app.get("/api/rounds/{round_id}/verify")
+def verify_round(
+    round_id: str,
+    session_id: SessionHeader,
+):
+    """Verify this round: the revealed seal plus hash / math / qubit checks (409 until the crash)."""
+    try:
+        return game_call(
+            manager.verify_round,
+            session_id,
+            round_id,
+        )
+    except NotRevealedYet as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.get("/api/player/balance")

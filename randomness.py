@@ -18,14 +18,13 @@ def classical_rng(bits: int = 36) -> int:
 def secure_rng(bits: int = 36) -> int:
     return secrets.randbits(bits)
 
-def quantum_rng(qubits: int = 6, samples: int = 6) -> int:
+def quantum_samples(qubits: int = 6, samples: int = 6) -> list[int]:
+    """One measured register per sample, validated."""
 
     numbers = generate_quantum_number(qubits=qubits, samples=samples)
 
     if len(numbers) != samples:
         raise ValueError("Incorrect quantum sample count")
-
-    combined = 0
 
     for number in numbers:
         if not isinstance(number, int):
@@ -34,19 +33,43 @@ def quantum_rng(qubits: int = 6, samples: int = 6) -> int:
         if not 0 <= number < (1 << qubits):
             raise ValueError("Quantum sample outside valid range")
 
+    return list(numbers)
+
+def combine_samples(numbers: list[int], qubits: int) -> int:
+    combined = 0
+
+    for number in numbers:
         combined = (combined << qubits) | number
 
     return combined
 
-def hybrid_rng(qubits: int = 6, samples: int = 6) -> tuple[int, str]:
+def quantum_rng(qubits: int = 6, samples: int = 6) -> int:
+    return combine_samples(quantum_samples(qubits, samples), qubits)
+
+def hybrid_draw(qubits: int = 6, samples: int = 6) -> dict:
+    """value = concat(quantum samples) XOR secure mask, with the ingredients kept for the fairness proof."""
     total_bits = qubits * samples
     try:
-        quantum = quantum_rng(qubits, samples)
-        classical = secure_rng(total_bits)
-        return quantum ^ classical, "hybrid"
+        measured = quantum_samples(qubits, samples)
+        mask = secure_rng(total_bits)
+        return {
+            "value": combine_samples(measured, qubits) ^ mask,
+            "source": "hybrid",
+            "quantum_samples": measured,
+            "classical_mask": mask,
+        }
 
     except Exception:
-        return secure_rng(total_bits), "secure_fallback"
+        return {
+            "value": secure_rng(total_bits),
+            "source": "secure_fallback",
+            "quantum_samples": None,
+            "classical_mask": None,
+        }
+
+def hybrid_rng(qubits: int = 6, samples: int = 6) -> tuple[int, str]:
+    draw = hybrid_draw(qubits, samples)
+    return draw["value"], draw["source"]
 
 def generate_random(mode: RNGMode = "hybrid", qubits: int = 6, samples: int = 6) -> dict:
 
@@ -57,6 +80,8 @@ def generate_random(mode: RNGMode = "hybrid", qubits: int = 6, samples: int = 6)
         raise ValueError("Samples must be between 1 and 64")
 
     total_bits = qubits * samples
+    measured = None
+    mask = None
 
     if mode == "classical":
         value = classical_rng(total_bits)
@@ -67,11 +92,14 @@ def generate_random(mode: RNGMode = "hybrid", qubits: int = 6, samples: int = 6)
         source = "secure"
 
     elif mode == "quantum":
-        value = quantum_rng(qubits, samples)
+        measured = quantum_samples(qubits, samples)
+        value = combine_samples(measured, qubits)
         source = "quantum_simulated"
 
     elif mode == "hybrid":
-        value, source = hybrid_rng(qubits, samples)
+        draw = hybrid_draw(qubits, samples)
+        value, source = draw["value"], draw["source"]
+        measured, mask = draw["quantum_samples"], draw["classical_mask"]
 
     else:
         raise ValueError(f"Unknown RNG mode: {mode}")
@@ -82,5 +110,9 @@ def generate_random(mode: RNGMode = "hybrid", qubits: int = 6, samples: int = 6)
         "mode": source,
         "bits": total_bits,
         "integer": value,
-        "normalized": normalized
+        "normalized": normalized,
+        # ingredients for the fairness proof (None when the mode has none)
+        "qubits": qubits,
+        "quantum_samples": measured,
+        "classical_mask": mask,
     }

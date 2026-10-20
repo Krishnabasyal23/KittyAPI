@@ -32,7 +32,7 @@ def test_insufficient_balance():
         place_bet(Decimal("100.00"), Decimal("200.00"))
 
 def test_cashout_at_five_seconds(monkeypatch):
-    monkeypatch.setattr("round_manager.generate_crash_point", lambda mode: 3.0)
+    monkeypatch.setattr("round_manager.draw_crash_point", lambda mode: (3.0, None))
     clock = [100.0]
     manager = RoundManager(clock=lambda: clock[0])
     session_id = manager.create_session()["session_id"]
@@ -51,8 +51,8 @@ def test_cashout_at_five_seconds(monkeypatch):
 
 def test_cashout_after_ten_seconds(monkeypatch):
     monkeypatch.setattr(
-        "round_manager.generate_crash_point",
-        lambda mode: 3.0
+        "round_manager.draw_crash_point",
+        lambda mode: (3.0, None)
     )
 
     clock = [100.0]

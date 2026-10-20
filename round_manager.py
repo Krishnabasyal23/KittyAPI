@@ -6,7 +6,7 @@ from time import monotonic
 from uuid import uuid4
 
 from crash_engine import (
-    generate_crash_point,
+    draw_crash_point,
     crash_after_seconds,
     multiplier_at,
     select_distraction,
@@ -24,11 +24,13 @@ from economy import (
 )
 
 from database.session_repository import from_cents
+from fairness import NotRevealedYet, make_proof, public_reveal, verify as verify_proof
 from randomness import LIVE_RNG_MODES
 from season_rules import (
     plan as plan_season_events,
     live as season_live,
     apply_bonus as season_bonus,
+    bonus_percents,
 )
 
 
@@ -244,7 +246,7 @@ class RoundManager:
             season = self._session(session_id).pop("next_season", None) or select_season()
         growth_rate, rush = season_growth_rate(season, mode=rng_mode)
         events = plan_season_events(season, MIN_CRASH_SECONDS) if self._season_rules else None
-        crash_point = generate_crash_point(mode=rng_mode)
+        crash_point, draw = draw_crash_point(mode=rng_mode)
         crash_time = crash_after_seconds(crash_point, growth_rate=growth_rate, lead_in_seconds=MIN_CRASH_SECONDS)
         distraction = select_distraction(season)
         with self._lock:
@@ -253,6 +255,8 @@ class RoundManager:
             )
 
             round_id = uuid4().hex
+            # provably fair: seal the outcome now, reveal it only after the cat is distracted
+            proof = make_proof(round_id, draw, crash_point)
 
             if self._session_store is not None:
                 new_balance = self._session_store.record_wager(
@@ -286,6 +290,7 @@ class RoundManager:
                 "rush": rush,
                 "lead_in_seconds": MIN_CRASH_SECONDS,
                 "events": events,
+                "proof": proof,
             }
 
             self.rounds[round_id] = round_data
@@ -319,6 +324,7 @@ class RoundManager:
                 "warmup_seconds": MIN_CRASH_SECONDS,
                 "growth_rate": growth_rate,
                 "can_cashout": False,
+                "commitment": proof["commitment"],
             }
 
     # GET LIVE ROUND STATE
@@ -424,6 +430,7 @@ class RoundManager:
                 "rules_on": round_data.get("events") is not None,
                 "butterfly": list(butterfly),
                 "leaf_storms": storms,
+                "bonus_pct": bonus_percents(),
             }
 
     # CASH OUT
@@ -474,7 +481,7 @@ class RoundManager:
             current = multiplier_at(elapsed, growth_rate=round_data["growth_rate"], lead_in_seconds=round_data["lead_in_seconds"])
             cashout_multiplier = math.floor(current * 100) / 100
             base_multiplier = cashout_multiplier
-            # season bonus (butterfly +25% / cocoa +10%) is paid as a higher multiplier
+            # season bonus (butterfly / cocoa, see season_rules.bonus_factors) is paid as a higher multiplier
             cashout_multiplier, bonus = season_bonus(
                 round_data["season"], round_data.get("events"), elapsed, base_multiplier
             )
@@ -543,11 +550,11 @@ class RoundManager:
                 session_id, round_id
             )
 
-            self._refresh_round(
-                round_data, self._clock()
-            )
+            now = self._clock()
+            self._refresh_round(round_data, now)
 
-            if round_data["status"] == "running":
+            if not self._outcome_public(round_data, now):
+                # still walking (also after an early cash-out): the crash point stays sealed
                 return {
                     "status": "running",
                     "result": None,
@@ -560,6 +567,49 @@ class RoundManager:
                 "crash_point": round_data["crash_point"],
                 "distraction": round_data["distraction"],
                 "payout": str(round_data["payout"]),
+                "proof": public_reveal(round_data.get("proof"), round_data["crash_point"]),
+            }
+
+    # FAIRNESS CHECK
+
+    def _outcome_public(self, round_data: dict, now: float) -> bool:
+        """True once the cat has been distracted. Rounds reloaded after a restart are long over."""
+        if round_data["status"] == "running":
+            return False
+        if round_data.get("start_time") is None:
+            return True
+        return now - round_data["start_time"] >= round_data["crash_time"]
+
+    def verify_round(
+        self,
+        session_id: str,
+        round_id: str,
+    ) -> dict:
+        """Reveal the seal and check it the same way the game client does."""
+        with self._lock:
+            round_data = self._owned_round(session_id, round_id)
+
+            now = self._clock()
+            self._refresh_round(round_data, now)
+
+            if not self._outcome_public(round_data, now):
+                raise NotRevealedYet("The seal opens when the cat gets distracted")
+
+            proof = round_data.get("proof")
+            if proof is None:
+                raise KeyError("No fairness proof kept for this round (the server restarted)")
+
+            crash_point = round_data["crash_point"]
+            reveal = public_reveal(proof, crash_point)
+            checks = verify_proof(round_id, reveal, crash_point, published_commitment=proof["commitment"])
+
+            return {
+                "round_id": round_id,
+                "crash_point": crash_point,
+                "commitment": proof["commitment"],
+                "proof": reveal,
+                "checks": checks,
+                "verified": all(v is not False for v in checks.values()),
             }
 
     # BET HISTORY
