@@ -2,6 +2,34 @@
 
 All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0-alpha.3] - 2026-10-20
+
+Phase 2: persistent wallet backend.
+
+### Added
+- New v2 database `data/catino-v2.db` (`KITTY_DB_PATH` overrides), built by versioned, checksummed
+  migrations 0001-0005 with automatic pre-upgrade backups and documented non-destructive rollback
+  (`docs/MIGRATIONS.md`, `python -m database.migrate status|up`).
+- Wallets with an append-only ledger: 50-point starting grant once, daily free 20 points once
+  per server day, `audit()` for ledger consistency.
+- Simulated purchases behind `DEMO_MODE=1`, Idempotency-Key required: $5 top-up = 40 points, $5
+  parking bundle = 60 points once per day. FakePayment provider, receipts labelled simulated.
+- Mock lottery tickets behind `DEMO_MODE=1`: server-issued ids, five doubling two-digit
+  numbers checked on the server, 25 points, max 3 per wallet per day, each id once ever.
+- Idempotency keys for rewards, purchases and ticket redemptions.
+- Responsible-gambling backend hooks: replaceable `WalletPolicy`, `rg_settings` (self-exclusion,
+  cool-off, daily spend limit, reality-check interval, age confirmation). No UI yet.
+- Fairness seals persisted with each round; `/verify` works after a restart.
+- Endpoints `/api/wallet`, `/ledger`, `/receipts`, `/daily-free`, `/purchase`, `/lottery/redeem`,
+  `/api/demo/lottery/tickets`. `/api/health` adds `min_bet`, `max_bet`, `db_schema`, `demo_mode`.
+
+### Changed
+- **Balances are whole points** (were 2-decimal credits). Starting balance 50 (was 1000). Payouts
+  are wager × multiplier rounded half to even. Fractional wagers are refused.
+- Crowd-mode phones use persistent wallets and rejoin them by `player_id`. Bet chips are 1/5/10/25.
+- v2 never opens the v1 database (`data/kittycat.db`). The default server port is 8001.
+- `/api/health` reports version `2.0.0-alpha.3`.
+
 ## [2.0.0-alpha.2] - 2026-10-20
 
 Phase 1b: fairness seal and bonus safety.

@@ -4,14 +4,19 @@ import sqlite3
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DB_PATH = ROOT / "data" / "kittycat.db"
-# Tests, scripts and the v2 server point this at their own file so the v1 data is never touched.
+# v2 has its own database file; its tables come from database/migrations (see migrate.py).
+DEFAULT_DB_PATH = ROOT / "data" / "catino-v2.db"
+# The v1 demo database. v2 code never opens it, so the v1 demo data cannot change.
+V1_DB_PATH = ROOT / "data" / "kittycat.db"
+# Tests, scripts and other deployments point this at their own file.
 DB_PATH = Path(os.getenv("KITTY_DB_PATH") or DEFAULT_DB_PATH)
-SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 
 
 def get_connection(db_path=None):
     path = Path(db_path) if db_path is not None else DB_PATH
+
+    if path.resolve() == V1_DB_PATH.resolve():
+        raise RuntimeError("v2 code never opens the v1 database (data/kittycat.db)")
 
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -24,30 +29,8 @@ def get_connection(db_path=None):
     return conn
 
 
-def initialize_database(db_path=None):
-    conn = get_connection(db_path)
+def initialize_database(db_path=None) -> dict:
+    """Bring the v2 database up to the latest migration (creates the file if needed)."""
+    from .migrate import migrate
 
-    try:
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.executescript(
-            SCHEMA_PATH.read_text(encoding="utf-8")
-        )
-        existing = {
-            row["name"]
-            for row in conn.execute("PRAGMA table_info(rounds)")
-        }
-
-        columns = {
-            "season": "TEXT NOT NULL DEFAULT 'spring'",
-            "growth_rate": "REAL NOT NULL DEFAULT 0.12",
-            "rush": "INTEGER NOT NULL DEFAULT 0",
-            "lead_in_seconds": "REAL NOT NULL DEFAULT 3.0",
-        }
-
-        for name, definition in columns.items():
-            if name not in existing:
-                conn.execute(f"ALTER TABLE rounds ADD COLUMN {name} {definition}")
-
-        conn.commit()
-    finally:
-        conn.close()
+    return migrate(db_path)

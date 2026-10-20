@@ -28,7 +28,7 @@ def test_create_session():
     data = response.json()
 
     assert "session_id" in data
-    assert data["balance"] == "1000.00"
+    assert data["balance"] == "50"
 
 def test_missing_session():
     response = client.get(
@@ -83,11 +83,11 @@ def test_round_start(monkeypatch):
         headers={
             "X-Session-ID": session["session_id"]
         },
-        json={"wager": "100.00"}
+        json={"wager": "10"}
     )
 
     assert response.status_code == 201
-    assert response.json()["balance"] == "900.00"
+    assert response.json()["balance"] == "40"
     assert "crash_point" not in response.json()
 
 

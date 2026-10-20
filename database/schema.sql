@@ -1,3 +1,5 @@
+-- v1 schema (data/kittycat.db), kept for reference only. v2 code never runs it:
+-- the v2 database is built by database/migrations/ (see database/migrate.py).
 
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
