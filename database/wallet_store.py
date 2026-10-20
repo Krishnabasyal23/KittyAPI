@@ -9,6 +9,9 @@ Rules every write follows:
     bug or a retried request cannot pay twice.
 """
 
+import json
+import re
+
 from datetime import date
 from decimal import Decimal
 from hashlib import sha256
@@ -17,10 +20,24 @@ from time import time as wall_clock
 
 from fairness import proof_to_columns
 from economy import INITIAL_BALANCE, MAX_BET, MIN_BET, calculate_cashout, validate_points
-from errors import InsufficientPoints, WalletError
+from errors import (
+    AlreadyClaimed,
+    FeatureDisabled,
+    IdempotencyConflict,
+    InsufficientPoints,
+    LimitReached,
+    TicketAlreadyUsed,
+    WalletError,
+)
+from lottery import MOCK_NOTICE, TICKET_DAILY_MAX, TICKET_POINTS, LotteryValidator
+from payments import PRODUCTS, SIMULATED_NOTICE, PaymentProvider
 from responsible import DefaultPolicy, RGSettings, WalletPolicy, utc_now
 
 from .connection import get_connection
+
+
+DAILY_FREE_POINTS = 20
+IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9_.:\-]{8,100}$")
 
 
 def server_day() -> str:
@@ -401,6 +418,212 @@ class WalletStore:
             for index, r in enumerate(rows, start=1)
         ]
 
+    # IDEMPOTENCY
+
+    def _replay(self, conn, wallet_id: str, key: str | None, endpoint: str, request: dict) -> dict | None:
+        """The stored response for a repeated request, None for a new one."""
+        if key is None:
+            return None
+        if not IDEMPOTENCY_KEY.fullmatch(key):
+            raise WalletError("Idempotency-Key must be 8-100 characters of A-Z a-z 0-9 _ . : -")
+        row = conn.execute(
+            "SELECT endpoint, request_hash, response_json FROM idempotency_keys WHERE wallet_id = ? AND idem_key = ?",
+            (wallet_id, key),
+        ).fetchone()
+        if row is None:
+            return None
+        if row["endpoint"] != endpoint or row["request_hash"] != _request_hash(request):
+            raise IdempotencyConflict("This Idempotency-Key was already used for a different request")
+        return {**json.loads(row["response_json"]), "replayed": True}
+
+    def _remember(self, conn, wallet_id: str, key: str | None, endpoint: str, request: dict, response: dict):
+        if key is not None:
+            conn.execute(
+                """
+                INSERT INTO idempotency_keys(wallet_id, idem_key, endpoint, request_hash, response_json)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (wallet_id, key, endpoint, _request_hash(request), json.dumps(response)),
+            )
+
+    def _require_wallet(self, conn, wallet_id: str) -> dict:
+        row = conn.execute("SELECT * FROM wallets WHERE wallet_id = ?", (wallet_id,)).fetchone()
+        if row is None:
+            raise KeyError("Wallet not found")
+        return dict(row)
+
+    # REWARDS
+
+    def claim_daily_free(self, wallet_id: str, idempotency_key: str | None = None) -> dict:
+        """20 free points, once per server calendar day."""
+        request = {}
+        with self._write() as conn:
+            replay = self._replay(conn, wallet_id, idempotency_key, "daily_free", request)
+            if replay:
+                return replay
+            self._require_wallet(conn, wallet_id)
+            day = self.today()
+            taken = conn.execute(
+                "SELECT 1 FROM ledger WHERE wallet_id = ? AND kind = 'daily_free' AND day = ?", (wallet_id, day)
+            ).fetchone()
+            if taken:
+                raise AlreadyClaimed("Today's free points were already claimed")
+            entry_id, balance = self._post(conn, wallet_id, "daily_free", DAILY_FREE_POINTS)
+            response = {"kind": "daily_free", "points": DAILY_FREE_POINTS, "balance": balance,
+                        "entry_id": entry_id, "day": day}
+            self._remember(conn, wallet_id, idempotency_key, "daily_free", request, response)
+            return response
+
+    # SIMULATED PURCHASES
+
+    def purchase(self, wallet_id: str, product_id: str, provider: PaymentProvider | None,
+                 idempotency_key: str | None) -> dict:
+        """Simulated purchase. Returns the receipt (status 'succeeded' or 'declined')."""
+        if provider is None:
+            raise FeatureDisabled("Simulated payments are off (start the server with DEMO_MODE=1)")
+        if idempotency_key is None:
+            raise WalletError("Purchases need an Idempotency-Key header")
+        product = PRODUCTS.get(product_id)
+        if product is None:
+            raise WalletError(f"Unknown product: {product_id}")
+        request = {"product": product_id}
+
+        with self._write() as conn:
+            replay = self._replay(conn, wallet_id, idempotency_key, "purchase", request)
+            if replay:
+                return replay
+            self._require_wallet(conn, wallet_id)
+            self._check_purchase(conn, wallet_id)
+            day = self.today()
+            if product.once_per_day and conn.execute(
+                "SELECT 1 FROM ledger WHERE wallet_id = ? AND kind = ? AND day = ?",
+                (wallet_id, product.ledger_kind, day),
+            ).fetchone():
+                raise LimitReached(f"The {product.label} can be bought once per day")
+
+            result = provider.charge(wallet_id, product, idempotency_key)
+            entry_id, balance = None, self._require_wallet(conn, wallet_id)["balance_points"]
+            if result.status == "succeeded":
+                entry_id, balance = self._post(conn, wallet_id, product.ledger_kind, product.points,
+                                               reference=result.payment_id)
+            conn.execute(
+                """
+                INSERT INTO payments(payment_id, provider, wallet_id, product, amount_cents, points,
+                                     status, day, entry_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (result.payment_id, result.provider, wallet_id, product_id, product.price_cents,
+                 product.points if result.status == "succeeded" else 0, result.status, day, entry_id),
+            )
+            row = conn.execute("SELECT * FROM payments WHERE payment_id = ?", (result.payment_id,)).fetchone()
+            response = {**_receipt(row), "balance": balance}
+            self._remember(conn, wallet_id, idempotency_key, "purchase", request, response)
+            return response
+
+    def get_receipts(self, wallet_id: str, limit: int = 50) -> list[dict]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM payments WHERE wallet_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
+                (wallet_id, limit),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [_receipt(r) for r in rows]
+
+    # MOCK LOTTERY TICKETS
+
+    def issue_mock_ticket(self, validator, numbers=None) -> dict:
+        if validator is None or not hasattr(validator, "issue"):
+            raise FeatureDisabled("Mock lottery tickets are off (start the server with DEMO_MODE=1)")
+        with self._write() as conn:
+            return validator.issue(conn, numbers)
+
+    def redeem_lottery_ticket(self, wallet_id: str, ticket_id: str, numbers, validator: LotteryValidator | None,
+                              idempotency_key: str | None = None) -> dict:
+        """25 points per valid ticket, at most 3 per wallet per server day, each ticket id once ever.
+        Validation, the redemption record and the credit happen in one transaction."""
+        if validator is None:
+            raise FeatureDisabled("Mock lottery tickets are off (start the server with DEMO_MODE=1)")
+        request = {"ticket_id": str(ticket_id).strip().upper(), "numbers": str(numbers)}
+
+        with self._write() as conn:
+            replay = self._replay(conn, wallet_id, idempotency_key, "lottery", request)
+            if replay:
+                return replay
+            self._require_wallet(conn, wallet_id)
+            ticket = validator.validate(ticket_id, numbers, conn=conn)
+
+            if conn.execute(
+                "SELECT 1 FROM lottery_tickets WHERE ticket_number = ?", (ticket.ticket_id,)
+            ).fetchone():
+                raise TicketAlreadyUsed("This ticket was already redeemed")
+            day = self.today()
+            used_today = conn.execute(
+                "SELECT COUNT(*) FROM lottery_tickets WHERE wallet_id = ? AND day = ?", (wallet_id, day)
+            ).fetchone()[0]
+            if used_today >= TICKET_DAILY_MAX:
+                raise LimitReached(f"At most {TICKET_DAILY_MAX} tickets per day")
+
+            entry_id, balance = self._post(conn, wallet_id, "lottery_ticket", TICKET_POINTS,
+                                           reference=ticket.ticket_id)
+            conn.execute(
+                "INSERT INTO lottery_tickets(ticket_number, wallet_id, day, entry_id) VALUES (?, ?, ?, ?)",
+                (ticket.ticket_id, wallet_id, day, entry_id),
+            )
+            response = {"kind": "lottery_ticket", "ticket_id": ticket.ticket_id, "numbers": ticket.numbers,
+                        "points": TICKET_POINTS, "balance": balance, "entry_id": entry_id, "day": day,
+                        "redeemed_today": used_today + 1, "daily_max": TICKET_DAILY_MAX,
+                        "validator": validator.name, "notice": MOCK_NOTICE}
+            self._remember(conn, wallet_id, idempotency_key, "lottery", request, response)
+            return response
+
+    # SUMMARY (what the Phase 3 wallet screen needs in one call)
+
+    def wallet_summary(self, wallet_id: str, demo: bool = False) -> dict:
+        conn = self._connect()
+        try:
+            wallet = self._require_wallet(conn, wallet_id)
+            day = self.today()
+            kinds_today = {
+                r[0] for r in conn.execute(
+                    "SELECT DISTINCT kind FROM ledger WHERE wallet_id = ? AND day = ?", (wallet_id, day))
+            }
+            tickets_today = conn.execute(
+                "SELECT COUNT(*) FROM lottery_tickets WHERE wallet_id = ? AND day = ?", (wallet_id, day)
+            ).fetchone()[0]
+            rg = self._rg(conn, wallet_id)
+            spent = self._spent_today(conn, wallet_id)
+        finally:
+            conn.close()
+
+        return {
+            "wallet_id": wallet_id,
+            "kind": wallet["kind"],
+            "name": wallet["display_name"],
+            "balance": wallet["balance_points"],
+            "day": day,
+            "daily_free": {"points": DAILY_FREE_POINTS, "available": "daily_free" not in kinds_today},
+            "products": [
+                {
+                    "product_id": p.product_id,
+                    "label": p.label,
+                    "price": f"{p.price_cents / 100:.2f}",
+                    "currency": "CAD",
+                    "points": p.points,
+                    "once_per_day": p.once_per_day,
+                    "available": demo and not (p.once_per_day and p.ledger_kind in kinds_today),
+                    "simulated": True,
+                }
+                for p in PRODUCTS.values()
+            ],
+            "lottery": {"points": TICKET_POINTS, "redeemed_today": tickets_today,
+                        "daily_max": TICKET_DAILY_MAX, "available": demo and tickets_today < TICKET_DAILY_MAX},
+            "demo_mode": demo,
+            "spent_today": spent,
+            "limits": rg.__dict__,
+        }
+
     # AUDIT
 
     def audit(self) -> list[dict]:
@@ -425,6 +648,28 @@ class WalletStore:
         finally:
             conn.close()
         return problems
+
+
+def _request_hash(request: dict) -> str:
+    return sha256(json.dumps(request, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _receipt(row) -> dict:
+    return {
+        "payment_id": row["payment_id"],
+        "provider": row["provider"],
+        "product": row["product"],
+        "label": PRODUCTS[row["product"]].label if row["product"] in PRODUCTS else row["product"],
+        "price": f"{row['amount_cents'] / 100:.2f}",
+        "currency": row["currency"],
+        "points": row["points"],
+        "status": row["status"],
+        "entry_id": row["entry_id"],
+        "day": row["day"],
+        "created_at": row["created_at"],
+        "simulated": True,
+        "notice": SIMULATED_NOTICE,
+    }
 
 
 class _Txn:
