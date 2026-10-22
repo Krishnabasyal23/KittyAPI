@@ -184,6 +184,13 @@ async def main():
             check("counter code shown", len(counter_code or "") == 9, counter_code)
             await shot("04b_profile_qr")
 
+            # menu
+            await js("openMenu()")
+            await asyncio.sleep(1)
+            text = await sheet_text()
+            check("menu lists how to play, safe play, demo reset", "How to play" in text and "Safe play" in text and "New demo player" in text, text[:200])
+            await shot("04c_menu")
+
             # history
             await js("openHistory()")
             await asyncio.sleep(1)

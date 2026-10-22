@@ -40,7 +40,7 @@ from season_rules import (
 )
 
 
-VERSION = "2.0.0-alpha.6"
+VERSION = "2.0.0-alpha.8"
 
 
 load_local_env()
