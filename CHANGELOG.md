@@ -2,6 +2,16 @@
 
 All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0-alpha.12] - 2026-10-22
+
+English / French.
+
+### Added
+- Phone page strings table (English / French, saved per phone): join screen, game status, bet and
+  cash-out buttons, menu, how to play, safe play, demo reset. Switch on the join screen or in the menu.
+  Wallet sheets and the server's season rule texts are still English only.
+- `/api/health` reports version `2.0.0-alpha.12`.
+
 ## [2.0.0-alpha.11] - 2026-10-22
 
 Three-season forecast.
