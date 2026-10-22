@@ -7,7 +7,7 @@ import main
 from fastapi.testclient import TestClient
 
 client = TestClient(main.app)
-counter = TestClient(main.app, client=("127.0.0.1", 50000))   # the cashier is on the server computer
+counter = TestClient(main.app, base_url="http://localhost", client=("127.0.0.1", 50000))   # the cashier is on the server computer
 
 
 @pytest.fixture

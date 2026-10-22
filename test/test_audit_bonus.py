@@ -10,7 +10,7 @@ from crash_engine import HOUSE_EDGE
 from fastapi.testclient import TestClient
 
 client = TestClient(main.app)
-local = TestClient(main.app, client=("127.0.0.1", 50003))
+local = TestClient(main.app, base_url="http://localhost", client=("127.0.0.1", 50003))
 
 
 @pytest.fixture(autouse=True)

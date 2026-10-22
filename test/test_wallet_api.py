@@ -74,7 +74,7 @@ def test_purchase_and_retry(demo):
     assert len(client.get("/api/wallet/receipts", headers=h).json()) == 1
 
 
-local = TestClient(main.app, client=("127.0.0.1", 50001))
+local = TestClient(main.app, base_url="http://localhost", client=("127.0.0.1", 50001))
 
 
 def test_ticket_flow(demo):

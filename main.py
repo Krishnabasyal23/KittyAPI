@@ -28,6 +28,7 @@ from lottery import lottery_validator
 from payments import CashierProvider, demo_mode, payment_provider
 from fairness import NotRevealedYet, clean_seed
 from errors import WalletError
+from guard import local_only, public_guard
 from randomness import LIVE_RNG_MODES
 from round_manager import RoundManager
 import reports
@@ -43,7 +44,7 @@ from season_rules import (
 )
 
 
-VERSION = "2.0.0-beta.2"
+VERSION = "2.0.0-beta.3"
 
 
 load_local_env()
@@ -150,6 +151,8 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-Session-ID", "Idempotency-Key"],
 )
 
+app.middleware("http")(public_guard)
+
 app.include_router(make_crowd_router(crowd))
 
 SessionHeader = Annotated[
@@ -162,13 +165,7 @@ IdempotencyHeader = Annotated[
     Header(alias="Idempotency-Key"),
 ]
 
-LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
 CASHIER_HTML = Path(__file__).resolve().parent / "cashier.html"
-
-
-def local_only(request: Request) -> None:
-    if request.client is None or request.client.host not in LOCAL_HOSTS:
-        raise HTTPException(status_code=403, detail="Only available on the server computer")
 
 
 DEMO_NOTICE = "DEMO MODE: payments are simulated and tickets are demo tickets"

@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from payments import FakePaymentProvider
 
 client = TestClient(main.app)
-local = TestClient(main.app, client=("127.0.0.1", 50002))
+local = TestClient(main.app, base_url="http://localhost", client=("127.0.0.1", 50002))
 TODAY = date.today().isoformat()
 
 
