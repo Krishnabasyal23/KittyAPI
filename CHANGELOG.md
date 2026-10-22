@@ -4,6 +4,10 @@ All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added
+- Test: the phone's season card and cash button, the health check and the rule texts show the
+  operator's tuned bonus at once.
+
 ## [2.0.0-beta.2] - 2026-10-22
 
 ### Added
