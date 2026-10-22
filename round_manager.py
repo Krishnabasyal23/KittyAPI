@@ -85,25 +85,35 @@ class RoundManager:
 
     # SEASON FORECAST
 
+    FORECAST_LENGTH = 3
+
+    def _season_queue(self, session: dict) -> list[str]:
+        """The seasons of the next walks, rolled in advance and used in this order (caller holds the lock)."""
+        queue = session.setdefault("season_queue", [])
+        while len(queue) < self.FORECAST_LENGTH:
+            queue.append(select_season())
+        return queue
+
     def peek_next_season(self, session_id: str) -> str:
         """The season of this session's NEXT walk, decided before betting so players can plan for it."""
+        return self.peek_seasons(session_id)[0]
+
+    def peek_seasons(self, session_id: str) -> list[str]:
+        """The next three walks' seasons. They are the real ones: each walk takes the first in line."""
         with self._lock:
-            session = self._session(session_id)
-            if session.get("next_season") is None:
-                session["next_season"] = select_season()
-            return session["next_season"]
+            return list(self._season_queue(self._session(session_id)))
 
     def set_next_season(self, session_id: str, season: str | None = None) -> str:
         """Host control (key N on the game screen): choose the next walk's season, or cycle to the next one."""
         order = ("spring", "summer", "fall", "winter")
         with self._lock:
-            session = self._session(session_id)
+            queue = self._season_queue(self._session(session_id))
             if season is None:
-                current = session.get("next_season") or select_season()
+                current = queue[0]
                 season = order[(order.index(current) + 1) % 4] if current in order else order[0]
             elif season not in order:
                 raise ValueError(f"Unknown season: {season}")
-            session["next_season"] = season
+            queue[0] = season
             return season
 
     # ROUND OWNERSHIP AND RECOVERY
@@ -247,7 +257,7 @@ class RoundManager:
 
         with self._lock:
             # use the forecast players saw while betting (or roll one now)
-            season = self._session(session_id).pop("next_season", None) or select_season()
+            season = self._season_queue(self._session(session_id)).pop(0)
         growth_rate, rush = season_growth_rate(season, mode=rng_mode)
         events = plan_season_events(season, MIN_CRASH_SECONDS) if self._season_rules else None
         crash_point, draw = draw_crash_point(mode=rng_mode)

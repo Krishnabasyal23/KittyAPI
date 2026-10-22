@@ -342,6 +342,13 @@
             border: 1px solid var(--line)
         }
 
+        .season span.next {
+            display: block;
+            margin-top: 2px;
+            opacity: .8;
+            font-size: 12px;
+        }
+
         .season .ico {
             font-size: 30px;
             line-height: 1
@@ -583,7 +590,7 @@
             <canvas id="scene"></canvas>
             <div id="season" class="season hidden">
                 <div class="ico" id="seasonIco"></div>
-                <div><b id="seasonTitle"></b><span id="seasonRule"></span></div>
+                <div><b id="seasonTitle"></b><span id="seasonRule"></span><span id="seasonNext" class="next"></span></div>
             </div>
             <div id="mult">1.00x</div>
             <div id="phaseText">Connecting…</div>
@@ -739,6 +746,8 @@
                 $("seasonTitle").textContent = (s.phase === "betting" ? "Next walk: " : "") + info.season.toUpperCase() + " · " + info.title;
                 $("seasonRule").textContent = info.rule;
             }
+            const up = s.phase === "betting" ? (s.forecast_upcoming || []) : [];
+            $("seasonNext").textContent = up.length > 1 ? "Then: " + up.slice(1).map(x => (SEASON_ICON[x] || "") + " " + x).join("  →  ") : "";
             if (s.butterfly && !lastButterfly && hasBet && !cashed) buzz([30, 30, 30]);
             lastButterfly = s.butterfly;
 

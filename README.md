@@ -52,7 +52,7 @@ Player endpoints take the wallet id in the `X-Session-ID` header: the PC session
 | GET | `/api/rounds/{id}/result` | Crash point, distraction and fairness proof once the cat is distracted |
 | GET | `/api/rounds/{id}/verify` | "Verify this round": revealed proof plus hash / math / qubit checks (409 until the crash) |
 | GET | `/api/rounds/{id}/season` | Season and event schedule for the game screen |
-| GET / POST | `/api/season/next` | Forecast / choose the next walk's season (host key N) |
+| GET / POST | `/api/season/next` | Forecast (next walk's season and rule, plus `upcoming`: the next three) / choose the next walk's season (host key N) |
 | GET | `/api/player/balance` | Current points |
 | GET | `/api/player/history` | Recent rounds |
 | GET | `/api/player/transactions` | Ledger (v1 shape) |
