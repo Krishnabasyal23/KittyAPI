@@ -201,6 +201,15 @@ async def main():
             check("French menu", "Comment jouer" in text and "Jeu responsable" in text, text[:200])
             check("French bet button", (await js("document.getElementById('betBtn').textContent")).startswith("MISER"))
             await shot("04e_menu_fr")
+            await js("openWallet()")
+            await asyncio.sleep(1)
+            text = await sheet_text()
+            check("French wallet sheet", "Solde" in text and "UTILISER LE BILLET" in text and "Balance" not in text, text[:200])
+            await js("document.getElementById('tCode').value='nope'; redeemTicket()")
+            await asyncio.sleep(1)
+            message = await js("document.getElementById('tMsg').textContent")
+            check("French server message (daily limit, today's ticket is used)", message.startswith("Vous avez déjà utilisé le billet du jour"), message)
+            await shot("04f_wallet_fr")
             await js("toggleLang(); closePanel()")
 
             # history
