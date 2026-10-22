@@ -713,6 +713,59 @@
             document.querySelectorAll("[data-tp]").forEach(e => e.placeholder = tr(e.dataset.tp));
             if ($("betBtn")) $("betBtn").textContent = tr("bet") + " " + wager;
         }
+        // French for the wallet sheets: each text node (and placeholder) is translated whole, numbers through patterns
+        const FX = {"👛 Wallet": "👛 Portefeuille", "Balance": "Solde", "FREE POINTS CLAIMED TODAY": "POINTS GRATUITS DÉJÀ RÉCLAMÉS", "DEMO MODE: payments are simulated. No real money is ever charged.": "MODE DÉMO : les paiements sont simulés. Aucun argent réel n'est jamais facturé.", "Demo top-up": "Recharge démo", "TOP UP": "RECHARGER", "Point packs are off on this server.": "Les forfaits de points sont désactivés sur ce serveur.", "Ticket bonus": "Bonus billet", "Ticket code": "Code du billet", "REDEEM TICKET": "UTILISER LE BILLET", "Today's ticket is redeemed. Come back tomorrow.": "Le billet du jour est utilisé. Revenez demain.", "🐱 Profile & cashier code": "🐱 Profil et code caisse", "🧾 Receipts & history": "🧾 Reçus et historique", "🛟 Play safe tools": "🛟 Outils de jeu responsable", "Close": "Fermer", "Cancel": "Annuler", "Back": "Retour", "Demo checkout": "Paiement démo", "SIMULATED PAYMENT · DEMO ONLY": "PAIEMENT SIMULÉ · DÉMO SEULEMENT", "No card is read and no real money is charged.": "Aucune carte n'est lue et aucun argent réel n'est facturé.", "You get": "Vous obtenez", "Pay with (demo)": "Payer avec (démo)", "📱 Phone wallet (demo)": "📱 Portefeuille mobile (démo)", "💳 Card (demo)": "💳 Carte (démo)", "I understand this is a simulated demo payment and no real money will be charged.": "Je comprends que c'est un paiement de démo simulé et qu'aucun argent réel ne sera facturé.", "Demo payment declined. No points added.": "Paiement démo refusé. Aucun point ajouté.", "🧾 Receipt (simulated)": "🧾 Reçu (simulé)", "SIMULATED PAYMENT (demo): no money was charged": "PAIEMENT SIMULÉ (démo) : aucun argent n'a été facturé", "Item": "Article", "Price": "Prix", "Points": "Points", "Status": "Statut", "succeeded": "réussi", "declined": "refusé", "Time": "Heure", "BACK TO WALLET": "RETOUR AU PORTEFEUILLE", "🧾 History": "🧾 Historique", "Simulated receipts": "Reçus simulés", "No purchases.": "Aucun achat.", "Points ledger": "Registre des points", "Welcome points": "Points de bienvenue", "Daily free": "Points gratuits du jour", "Demo parking bundle": "Forfait stationnement démo", "Bet": "Mise", "Cash-out": "Encaissement", "Refund": "Remboursement", "🐱 Profile": "🐱 Profil", "Nickname": "Pseudo", "SAVE": "ENREGISTRER", "Rounds played": "Tours joués", "Cash-outs": "Encaissements", "Best cash-out": "Meilleur encaissement", "Net points": "Points nets", "Cashier code": "Code caisse", "Show this at the counter to top up there (simulated). It works once and only for a few minutes.": "Montrez-le au comptoir pour recharger (simulé). Il fonctionne une fois, pendant quelques minutes.", "Show my cashier code": "Afficher mon code caisse", "Counter code": "Code comptoir", "Expired. Ask for a new code.": "Expiré. Demandez un nouveau code.", "ginger": "roux", "black": "noir", "white": "blanc", "grey": "gris", "tabby": "tigré", "🛟 Play safe": "🛟 Jeu responsable", "Daily spend limit": "Limite de mise quotidienne", "Points per day": "Points par jour", "Set": "Fixer", "Remove": "Retirer", "Reality check": "Rappel de durée de jeu", "Take a break": "Prendre une pause", "Pause betting and purchases. It can't be shortened.": "Suspend les mises et les achats. Ne peut pas être raccourcie.", "1 day": "1 jour", "Self-exclusion": "Auto-exclusion", "Blocks all betting and purchases on this wallet for the whole period. It cannot be undone early.": "Bloque toutes les mises et tous les achats de ce portefeuille pendant toute la période. Impossible d'annuler avant la fin.", "I understand and want to self-exclude.": "Je comprends et je veux m'auto-exclure.", "Need to talk to someone? ConnexOntario: 1-866-531-2600 or text CONNEX to 247247 (free, 24/7). Crisis: call or text 9-8-8.": "Besoin de parler à quelqu'un? ConnexOntario : 1-866-531-2600 ou textez CONNEX au 247247 (gratuit, 24/7). En crise : appelez ou textez le 9-8-8.", "Enter a number of points.": "Entrez un nombre de points.", "Tick the box to start a break.": "Cochez la case pour commencer une pause.", "Tick the box to self-exclude.": "Cochez la case pour vous auto-exclure.", "Out of points": "Plus de points", "You can keep watching the walk. To play again:": "Vous pouvez continuer à regarder. Pour rejouer :", "Free points are back tomorrow.": "Les points gratuits reviennent demain.", "Top up or enter a ticket": "Recharger ou entrer un billet", "🛟 Take a break": "🛟 Prendre une pause", "Just watch": "Juste regarder", "⏰ Reality check": "⏰ Rappel de durée de jeu", "Playing for": "Vous jouez depuis", "Bets": "Mises", "Points bet": "Points misés", "Points won": "Points gagnés", "Net": "Net", "KEEP PLAYING": "CONTINUER", "See my history": "Voir mon historique", "That ticket couldn't be verified": "Ce billet n'a pas pu être vérifié", "You've already redeemed today's ticket. Come back tomorrow": "Vous avez déjà utilisé le billet du jour. Revenez demain", "Today's free points were already claimed": "Les points gratuits du jour ont déjà été réclamés", "Not enough points": "Pas assez de points", "Nickname: 2-12 letters, digits, spaces, - or _": "Pseudo : 2 à 12 lettres, chiffres, espaces, - ou _", "Network problem": "Problème de réseau", "Tick the box to confirm this simulated payment": "Cochez la case pour confirmer ce paiement simulé", "That code isn't valid": "Ce code n'est pas valide"};
+        const FXP = [
+            [/^🪙 (\d+) points$/, "🪙 $1 points"],
+            [/^CLAIM (\d+) FREE POINTS$/, "RÉCLAMER $1 POINTS GRATUITS"],
+            [/^\$(\d+)-\$(\d+) · (\d+) points per \$1 · \$(\d+) of \$(\d+) left today · simulated, no money moves$/, "$1 $$ à $2 $$ · $3 points par dollar · $4 $$ sur $5 $$ restants aujourd'hui · simulé, aucun argent ne circule"],
+            [/^\$(\d+) → (\d+) points$/, "$1 $$ → $2 points"],
+            [/^Whole dollars, \$(\d+)-\$(\d+)$/, "Dollars entiers, de $1 $$ à $2 $$"],
+            [/^\$(\d+) demo top-up$/, "Recharge démo de $1 $$"],
+            [/^\$(\d+) demo parking bundle$/, "Forfait stationnement démo de $1 $$"],
+            [/^\$(\d+) demo parking bundle · \$([\d.]+) →$/, "Forfait stationnement démo de $1 $$ · $2 $$ →"],
+            [/^\$(\d+) demo top-up · (\w+)$/, "Recharge démo de $1 $$ · $2"],
+            [/^\$(\d+) demo parking bundle · (\w+)$/, "Forfait stationnement démo de $1 $$ · $2"],
+            [/^· once a day$/, "· une fois par jour"],
+            [/^DEMO · simulated payment, no money moves( · already bought today)?$/, "DÉMO · paiement simulé, aucun argent ne circule"],
+            [/^(\d+) points$/, "$1 points"],
+            [/^\$([\d.]+) (\w+)$/, "$1 $$ $2"],
+            [/^(\d+) points, one ticket a day · demo tickets only, not real lottery tickets$/, "$1 points, un billet par jour · billets de démo seulement, pas de vrais billets de loterie"],
+            [/^Ticket entry is paused until (.+)\.$/, "La saisie des billets est en pause jusqu'au $1."],
+            [/^Ticket entry is paused after too many tries\. Try again in (\d+) min$/, "Saisie des billets en pause après trop d'essais. Réessayez dans $1 min"],
+            [/^\+(\d+) points! Balance (\d+)$/, "+$1 points! Solde $2"],
+            [/^PAY \$([\d.]+) \(DEMO\)$/, "PAYER $1 $$ (DÉMO)"],
+            [/^Payment id (\S+) · provider (\w+)$/, "Paiement $1 · fournisseur $2"],
+            [/^Saved as (.+)$/, "Enregistré : $1"],
+            [/^Expires in (\d+:\d+)$/, "Expire dans $1"],
+            [/^Now: (.+) · spent today (\d+)( · (\d+) left)?$/, "Actuelle : $1 · misé aujourd'hui $2$3"],
+            [/^Change waiting: (.+) from (.+)$/, "Changement prévu : $1 à partir du $2"],
+            [/^Lowering applies now\. Raising or removing waits (\d+) hours\.$/, "Baisser s'applique tout de suite. Augmenter ou retirer attend $1 heures."],
+            [/^every (\d+) min$/, "toutes les $1 min"],
+            [/^(\d+) hour$/, "$1 heure"],
+            [/^(\d+) days$/, "$1 jours"],
+            [/^Self-excluded until (.+?)\.?$/, "Auto-exclusion jusqu'au $1."],
+            [/^Taking a break until (.+)\.$/, "En pause jusqu'au $1."],
+            [/^Cooling off until (.+)$/, "En pause jusqu'au $1"],
+            [/^(\d+) minutes$/, "$1 minutes"],
+            [/^Daily spend limit of (\d+) points reached \((\d+) spent today\)$/, "Limite quotidienne de $1 points atteinte ($2 misés aujourd'hui)"],
+            [/^Confirm you are (\d+) or older to play$/, "Confirmez avoir $1 ans ou plus pour jouer"],
+            [/^Top-ups are capped at \$(\d+) a day \(\$(\d+) left today\)$/, "Les recharges sont plafonnées à $1 $$ par jour ($2 $$ restants aujourd'hui)"]
+        ];
+        function fx(text) {
+            if (LANG === "en" || !text) return text;
+            const key = text.trim();
+            if (!key) return text;
+            let out = FX[key];
+            if (out === undefined) for (const [re, rep] of FXP) if (re.test(key)) { out = key.replace(re, rep); break; }
+            return out === undefined ? text : text.replace(key, out);
+        }
+        function localize(root) {
+            if (LANG === "en") return;
+            const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            for (let n = walk.nextNode(); n; n = walk.nextNode()) n.nodeValue = fx(n.nodeValue);
+            root.querySelectorAll("[placeholder]").forEach(e => e.placeholder = fx(e.placeholder));
+        }
         function toggleLang() { LANG = LANG === "en" ? "fr" : "en"; localStorage.setItem("kc_lang", LANG); applyLang(); }
         applyLang();
 
@@ -774,7 +827,7 @@
 
         async function poll() {
             try {
-                const j = await api("/api/crowd/state?player_id=" + encodeURIComponent(pid));
+                const j = await api("/api/crowd/state?player_id=" + encodeURIComponent(pid) + "&lang=" + LANG);
                 if (pid && j.you === null) await rejoin();   // server restarted: same wallet, same points
                 s = j; recvAt = performance.now(); render();
             } catch (e) { $("phaseText").textContent = tr("st.noGame") }
@@ -784,7 +837,7 @@
             if (!s) return;
             const you = s.you || { bet: 0, cashed_at: 0, payout: 0, balance: 0, name: "" };
             const hasBet = you.bet > 0, cashed = you.cashed_at > 0;
-            $("count").textContent = s.player_count + " playing";
+            $("count").textContent = s.player_count + (LANG === "fr" ? " en jeu" : " playing");
             if (window.walletOnState) walletOnState(s);
             $("me").textContent = you.name;
             $("bal").textContent = "🪙 " + Math.floor(you.balance);
@@ -1181,10 +1234,10 @@
             const k = crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2);
             return "phone-" + k.replace(/[^A-Za-z0-9_.:-]/g, "");
         }
-        function showPanel(html) { $("sheetBody").innerHTML = html; $("sheet").classList.remove("hidden"); }
+        function showPanel(html) { $("sheetBody").innerHTML = html; localize($("sheetBody")); $("sheet").classList.remove("hidden"); }
         function closePanel() { $("sheet").classList.add("hidden"); }
         function panelOpen() { return !$("sheet").classList.contains("hidden"); }
-        function note(id, text, bad) { const el = $(id); if (el) { el.textContent = text; el.style.color = bad ? "var(--red)" : "var(--green)"; } }
+        function note(id, text, bad) { const el = $(id); if (el) { el.textContent = fx(text); el.style.color = bad ? "var(--red)" : "var(--green)"; } }
         const until = t => t ? new Date(t).toLocaleString() : "";
         async function loadWallet() { WAL = await wapi("GET", "/api/wallet"); return WAL; }
 
@@ -1368,7 +1421,7 @@
                 const end = Date.now() + q.seconds * 1000;
                 $("qrBox").innerHTML = `<div style="background:#fff;display:inline-block;padding:6px;border-radius:8px">${q.svg}</div>
                     <div class="kv"><span>Counter code</span><b style="letter-spacing:2px">${esc(q.counter_code)}</b></div><div id="qrLeft" class="tiny"></div>`;
-                const tick = () => { const left = Math.max(0, Math.round((end - Date.now()) / 1000)); if ($("qrLeft")) $("qrLeft").textContent = left ? `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Expired. Ask for a new code."; if (!left || !$("qrLeft")) clearInterval(qrTimer); };
+                const tick = () => { const left = Math.max(0, Math.round((end - Date.now()) / 1000)); if ($("qrLeft")) $("qrLeft").textContent = left ? `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Expired. Ask for a new code."; if ($("qrLeft")) $("qrLeft").textContent = fx($("qrLeft").textContent); if (!left || !$("qrLeft")) clearInterval(qrTimer); };
                 tick(); qrTimer = setInterval(tick, 1000);
             } catch (e) { $("qrBox").innerHTML = `<div class="warn">${esc(e.message)}</div>` }
         }
