@@ -5,6 +5,7 @@ import math
 import os
 import socket
 import threading
+import time
 import uuid
 
 from pathlib import Path
@@ -91,6 +92,7 @@ class CrowdTable:
         self.history = []
         self.forecast = None        # season of the next walk (players see it while betting)
         self.host_name = "PC Player"  # the person playing on the big screen (shown on the leaderboard)
+        self.last_seen = 0.0          # monotonic time a phone last asked for the table (the auto host sleeps when nobody does)
 
     # ---------- host (the Unity game) ----------
 
@@ -148,6 +150,7 @@ class CrowdTable:
         confirmation (the phone's join checkbox); without it the phone can watch but not bet."""
         name = " ".join((name or "").split())[:12] or "Kitty fan"
         with self.lock:
+            self.last_seen = time.monotonic()
             if player_id and player_id in self.players:
                 p = self.players[player_id]
                 if age_confirmed:
@@ -314,6 +317,8 @@ class CrowdTable:
 
     def state(self, pid: str = None, lang: str = "en") -> dict:
         with self.lock:
+            if pid:
+                self.last_seen = time.monotonic()
             self._tick()
             now = self.clock()
             data = {

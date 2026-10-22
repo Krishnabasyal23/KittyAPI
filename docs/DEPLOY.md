@@ -11,6 +11,8 @@ join QR a public https address, from quickest to most permanent.
 
 Run **one** worker. The crowd table and the rounds live in memory.
 
+`AUTO_HOST=1` adds the house table (see below). Leave it off when the Unity game on the server PC hosts the table.
+
 ## 1. Your PC plus a tunnel (about 10 minutes, free)
 
 Good for a live demo. The link works while your PC, the server and the tunnel are running.
@@ -34,8 +36,9 @@ reserved domain, and put `PUBLIC_URL=...` in `KittyAPI\.env.local`.
   when the service restarts. Render's disk needs a paid plan; Fly volumes are cheap; free tiers also sleep when idle.
 - **Secrets:** set `TICKET_SECRET` and `QR_SECRET` (long random values) and `PUBLIC_URL=https://<your host>`.
 - **Health check:** `/api/health`.
-- A round needs a host to open betting. With only the hosted server online, the phones can join but the table stays
-  idle until a host (the Unity game pointed at the hosted address) opens a round. An automatic host is listed below.
+- A round needs a host to open betting. The images set `AUTO_HOST=1`: the server's own **House Cat** opens betting, bets one point,
+  runs the walk and starts again, but only while a phone is watching the table. Phones play, cash out and open Schrödinger's Box with
+  no PC involved. If the Unity game takes the host seat the House steps aside, and takes it back after the table has stood still for a minute.
 
 ## 3. A VM (AWS Lightsail/EC2, any VPS)
 
@@ -76,5 +79,4 @@ On a host, run these through its shell (`fly ssh console`, Render shell). Back u
 
 ## Not built yet
 
-- An automatic host, so a hosted table opens rounds without the Unity game.
 - Real logins and identity checks (wallets are anonymous and 19+ is self-attested).

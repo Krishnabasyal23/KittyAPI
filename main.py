@@ -28,6 +28,7 @@ from lottery import lottery_validator
 from payments import CashierProvider, demo_mode, payment_provider
 from fairness import NotRevealedYet, clean_seed
 from errors import WalletError
+from autohost import start_if_enabled as start_auto_host
 from guard import local_only, public_guard
 from randomness import LIVE_RNG_MODES
 from round_manager import RoundManager
@@ -106,7 +107,12 @@ async def lifespan(app: FastAPI):
     except ValueError:
         set_bonus_percents(None)
 
+    auto = start_auto_host(manager, crowd, GAME_RNG_MODE)
+
     yield
+
+    if auto is not None:
+        auto[1].set()
 
 
 app = FastAPI(

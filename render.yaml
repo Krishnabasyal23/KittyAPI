@@ -13,6 +13,8 @@ services:
     envVars:
       - key: PUBLIC_MODE
         value: "1"
+      - key: AUTO_HOST
+        value: "1"
       - key: KITTY_DB_PATH
         value: /data/catino-v2.db
       - key: TICKET_SECRET

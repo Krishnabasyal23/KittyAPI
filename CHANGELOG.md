@@ -2,6 +2,13 @@
 
 All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- Auto host (`AUTO_HOST=1`, `autohost.py`): a house table that runs by itself. The server's own wallet ("House Cat") takes the host
+  seat, opens betting, bets one point, runs the walk and starts again while a phone is watching, so a hosted server plays without
+  the Unity game. It steps aside for a real host and takes the seat back after 60 s of stillness. Seven tests.
+
 ## [2.0.0-beta.3] - 2026-10-22
 
 ### Added
