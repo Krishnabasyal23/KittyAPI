@@ -571,12 +571,12 @@
 
     <!-- join -->
     <div id="joinView" class="card" style="display:flex;flex-direction:column;gap:12px">
-        <div style="font-size:20px">Bet on the cat with everyone in the room. Cash out before kitty gets distracted!
-        </div>
-        <input id="name" maxlength="12" placeholder="Your name" autocomplete="off">
-        <label class="check"><input type="checkbox" id="ageOk"> I am 19 or older.</label>
-        <div class="dim">Points only, no real money. Play for fun and take breaks.</div>
-        <button class="big go" id="joinBtn" disabled>JOIN THE GAME</button>
+        <div style="font-size:20px" data-t="join.intro">Bet on the cat with everyone in the room. Cash out before kitty gets distracted!</div>
+        <input id="name" maxlength="12" placeholder="Your name" data-tp="join.name" autocomplete="off">
+        <label class="check"><input type="checkbox" id="ageOk"> <span data-t="join.age">I am 19 or older.</span></label>
+        <div class="dim" data-t="join.points">Points only, no real money. Play for fun and take breaks.</div>
+        <button class="big go" id="joinBtn" disabled data-t="join.button">JOIN THE GAME</button>
+        <button class="ghost" onclick="toggleLang()" data-t="lang.switch">Français</button>
         <div id="joinErr" class="dim" style="color:var(--red)"></div>
     </div>
 
@@ -614,14 +614,14 @@
         <div id="msg"></div>
 
         <details class="card fold" open>
-            <summary class="row"><b>This walk</b><span class="dim" id="riders"></span></summary>
+            <summary class="row"><b data-t="walk.title">This walk</b><span class="dim" id="riders"></span></summary>
             <div class="list" id="players" style="margin-top:8px"></div>
         </details>
         <details class="card fold">
-            <summary><b>Leaderboard</b></summary>
+            <summary><b data-t="board.title">Leaderboard</b></summary>
             <div class="list" id="board" style="margin-top:8px"></div>
         </details>
-        <button class="ghost" id="menuBtn">☰ Menu: how to play, safe play, profile</button>
+        <button class="ghost" id="menuBtn" data-t="menu.button">☰ Menu: how to play, safe play, profile</button>
     </div>
 
     <!-- wallet / checkout / play-safe sheet -->
@@ -639,6 +639,82 @@
         // bonus size comes from the server (season_rules.bonus_factors); blank if an older server does not say
         function pct(kind) { const v = s && s.bonus_pct ? s.bonus_pct[kind] : null; return v == null ? "" : "+" + v + "%"; }
         let lastButterfly = false;
+
+        // English / French strings for the main screens (saved per phone)
+        const TXT = {
+            en: {
+                "join.intro": "Bet on the cat with everyone in the room. Cash out before kitty gets distracted!",
+                "join.name": "Your name", "join.age": "I am 19 or older.",
+                "join.points": "Points only, no real money. Play for fun and take breaks.",
+                "join.button": "JOIN THE GAME", "lang.switch": "Français",
+                "menu.button": "☰ Menu: how to play, safe play, profile", "walk.title": "This walk", "board.title": "Leaderboard",
+                "bet": "BET", "cash": "CASH OUT",
+                "st.waiting": "Waiting for the game screen…", "st.youBet": "You bet {0} - kitty leaves soon", "st.place": "Place your bet!",
+                "st.safe": "Safe at {0}x 🎉", "st.stretch": "Kitty is stretching… get ready!", "st.rush": "☀️ SUMMER RUSH! It's climbing fast!",
+                "st.walking": "Kitty is walking… CASH OUT in time!", "st.watching": "Watching this walk",
+                "st.distracted": "Distracted by {0}! Next walk soon", "st.noGame": "Can't reach the game - same Wi-Fi?",
+                "m.title": "☰ Menu", "m.wallet": "👛 Wallet: free points, top-up, ticket", "m.profile": "🐱 Profile &amp; cashier code",
+                "m.safe": "🛟 Safe play: limits, breaks, self-exclusion", "m.howto": "❓ How to play", "m.reset": "🔄 New demo player",
+                "m.back": "Back to the game",
+                "h.title": "❓ How to play", "h.1": "1. While betting is open, pick a bet and tap BET.",
+                "h.2": "2. The cat on the big screen starts walking and the multiplier climbs.",
+                "h.3": "3. Tap CASH OUT before the cat gets distracted. You win bet × multiplier.",
+                "h.4": "4. If the cat gets distracted first, the bet is lost.",
+                "h.5": "5. Each season changes one rule. Watch the forecast while betting.",
+                "h.points": "Points are not money and can't be cashed out. Take breaks.", "h.ok": "GOT IT",
+                "s.title": "🛟 Safe play", "s.points": "Catino is a game. Points have no cash value and can't be cashed out.",
+                "s.1": "Decide how long you'll play before you start, and stop when the time is up.",
+                "s.2": "Each walk is random. The next walk doesn't know about the last one, so chasing losses never helps.",
+                "s.3": "On average the game pays back less than you bet. Playing longer doesn't make a win more likely.",
+                "s.4": "Take breaks. If playing stops being fun, or you feel you have to play, stop.",
+                "s.open": "LIMITS, REALITY CHECK &amp; BREAKS",
+                "s.help": "Need to talk to someone? ConnexOntario: call {0} or text CONNEX to 247247 (free, 24/7, includes gambling support).",
+                "s.crisis": "In crisis: call or text 9-8-8 (Canada, 24/7). In danger: call 9-1-1.", "back": "Back",
+                "r.title": "🔄 New demo player", "r.ask": "Start over with a fresh wallet and the starting points. Your old wallet stays on the server.",
+                "r.yes": "START OVER", "cancel": "Cancel", "then": "Then: ",
+            },
+            fr: {
+                "join.intro": "Misez sur le chat avec toute la salle. Encaissez avant qu'il soit distrait!",
+                "join.name": "Votre nom", "join.age": "J'ai 19 ans ou plus.",
+                "join.points": "Des points seulement, pas d'argent réel. Jouez pour le plaisir et prenez des pauses.",
+                "join.button": "REJOINDRE LE JEU", "lang.switch": "English",
+                "menu.button": "☰ Menu : comment jouer, jeu responsable, profil", "walk.title": "Cette promenade", "board.title": "Classement",
+                "bet": "MISER", "cash": "ENCAISSER",
+                "st.waiting": "En attente de l'écran de jeu…", "st.youBet": "Vous avez misé {0} - le chat part bientôt", "st.place": "Faites votre mise!",
+                "st.safe": "À l'abri à {0}x 🎉", "st.stretch": "Le chat s'étire… préparez-vous!", "st.rush": "☀️ FOLIE D'ÉTÉ! Ça monte vite!",
+                "st.walking": "Le chat marche… ENCAISSEZ à temps!", "st.watching": "Vous regardez cette promenade",
+                "st.distracted": "Distrait par {0}! Prochaine promenade bientôt", "st.noGame": "Jeu injoignable - même Wi-Fi?",
+                "m.title": "☰ Menu", "m.wallet": "👛 Portefeuille : points gratuits, recharge, billet", "m.profile": "🐱 Profil et code caisse",
+                "m.safe": "🛟 Jeu responsable : limites, pauses, auto-exclusion", "m.howto": "❓ Comment jouer", "m.reset": "🔄 Nouveau joueur (démo)",
+                "m.back": "Retour au jeu",
+                "h.title": "❓ Comment jouer", "h.1": "1. Pendant les mises, choisissez une mise et touchez MISER.",
+                "h.2": "2. Le chat du grand écran se met à marcher et le multiplicateur monte.",
+                "h.3": "3. Touchez ENCAISSER avant que le chat soit distrait. Vous gagnez mise × multiplicateur.",
+                "h.4": "4. Si le chat est distrait avant, la mise est perdue.",
+                "h.5": "5. Chaque saison change une règle. Regardez la prévision pendant les mises.",
+                "h.points": "Les points ne sont pas de l'argent et ne s'encaissent pas. Prenez des pauses.", "h.ok": "COMPRIS",
+                "s.title": "🛟 Jeu responsable", "s.points": "Catino est un jeu. Les points n'ont aucune valeur en argent et ne s'encaissent pas.",
+                "s.1": "Décidez combien de temps vous jouerez avant de commencer, et arrêtez quand le temps est écoulé.",
+                "s.2": "Chaque promenade est aléatoire. La suivante ne dépend pas de la précédente : courir après ses pertes ne sert à rien.",
+                "s.3": "En moyenne, le jeu redonne moins que ce que vous misez. Jouer plus longtemps ne rend pas un gain plus probable.",
+                "s.4": "Prenez des pauses. Si le jeu n'est plus amusant, ou si vous sentez que vous devez jouer, arrêtez.",
+                "s.open": "LIMITES, RAPPELS ET PAUSES",
+                "s.help": "Besoin de parler à quelqu'un? ConnexOntario : appelez le {0} ou textez CONNEX au 247247 (gratuit, 24/7, aide pour le jeu incluse).",
+                "s.crisis": "En crise : appelez ou textez le 9-8-8 (Canada, 24/7). En danger : composez le 9-1-1.", "back": "Retour",
+                "r.title": "🔄 Nouveau joueur (démo)", "r.ask": "Recommencez avec un nouveau portefeuille et les points de départ. L'ancien reste sur le serveur.",
+                "r.yes": "RECOMMENCER", "cancel": "Annuler", "then": "Ensuite : ",
+            },
+        };
+        let LANG = localStorage.getItem("kc_lang") === "fr" ? "fr" : "en";
+        function tr(key, ...args) { return (TXT[LANG][key] ?? TXT.en[key] ?? key).replace(/\{(\d)\}/g, (_, i) => args[+i]); }
+        function applyLang() {
+            document.documentElement.lang = LANG;
+            document.querySelectorAll("[data-t]").forEach(e => e.innerHTML = tr(e.dataset.t));
+            document.querySelectorAll("[data-tp]").forEach(e => e.placeholder = tr(e.dataset.tp));
+            if ($("betBtn")) $("betBtn").textContent = tr("bet") + " " + wager;
+        }
+        function toggleLang() { LANG = LANG === "en" ? "fr" : "en"; localStorage.setItem("kc_lang", LANG); applyLang(); }
+        applyLang();
 
         function esc(t) { return String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])) }
         function buzz(p) { try { navigator.vibrate && navigator.vibrate(p) } catch (e) { } }
@@ -667,7 +743,7 @@
 
         document.querySelectorAll(".chip").forEach(b => b.onclick = () => {
             document.querySelectorAll(".chip").forEach(x => x.classList.remove("on")); b.classList.add("on");
-            wager = +b.dataset.v; $("betBtn").textContent = "BET " + wager;
+            wager = +b.dataset.v; $("betBtn").textContent = tr("bet") + " " + wager;
         });
 
         $("betBtn").onclick = async () => {
@@ -701,7 +777,7 @@
                 const j = await api("/api/crowd/state?player_id=" + encodeURIComponent(pid));
                 if (pid && j.you === null) await rejoin();   // server restarted: same wallet, same points
                 s = j; recvAt = performance.now(); render();
-            } catch (e) { $("phaseText").textContent = "Can't reach the game - same Wi-Fi?" }
+            } catch (e) { $("phaseText").textContent = tr("st.noGame") }
         }
 
         function render() {
@@ -732,10 +808,10 @@
             $("cashBtn").classList.toggle("hidden", !(s.phase === "running" && hasBet && !cashed));
             $("cashBtn").disabled = warming();
 
-            if (s.phase === "waiting") $("phaseText").textContent = "Waiting for the game screen…";
-            else if (s.phase === "betting") $("phaseText").textContent = hasBet ? `You bet ${you.bet.toFixed(0)} - kitty leaves soon` : "Place your bet!";
-            else if (s.phase === "running") $("phaseText").textContent = cashed ? `Safe at ${you.cashed_at.toFixed(2)}x 🎉` : warming() ? "Kitty is stretching… get ready!" : hasBet ? (s.rush ? "☀️ SUMMER RUSH! It's climbing fast!" : "Kitty is walking… CASH OUT in time!") : "Watching this walk";
-            else if (s.phase === "crashed") $("phaseText").textContent = "Distracted by " + (s.distraction || "something").replace(/_/g, " ") + "! Next walk soon";
+            if (s.phase === "waiting") $("phaseText").textContent = tr("st.waiting");
+            else if (s.phase === "betting") $("phaseText").textContent = hasBet ? tr("st.youBet", you.bet.toFixed(0)) : tr("st.place");
+            else if (s.phase === "running") $("phaseText").textContent = cashed ? tr("st.safe", you.cashed_at.toFixed(2)) : warming() ? tr("st.stretch") : hasBet ? (s.rush ? tr("st.rush") : tr("st.walking")) : tr("st.watching");
+            else if (s.phase === "crashed") $("phaseText").textContent = tr("st.distracted", (s.distraction || "something").replace(/_/g, " "));
 
             // season card: the forecast while betting, the live rule while walking
             const info = s.phase === "betting" ? s.forecast : (s.phase === "running" || s.phase === "crashed") ? s.rules : null;
@@ -747,7 +823,7 @@
                 $("seasonRule").textContent = info.rule;
             }
             const up = s.phase === "betting" ? (s.forecast_upcoming || []) : [];
-            $("seasonNext").textContent = up.length > 1 ? "Then: " + up.slice(1).map(x => (SEASON_ICON[x] || "") + " " + x).join("  →  ") : "";
+            $("seasonNext").textContent = up.length > 1 ? tr("then") + up.slice(1).map(x => (SEASON_ICON[x] || "") + " " + x).join("  →  ") : "";
             if (s.butterfly && !lastButterfly && hasBet && !cashed) buzz([30, 30, 30]);
             lastButterfly = s.butterfly;
 
@@ -784,7 +860,7 @@
                 const season = s.rules ? s.rules.season : "";
                 const gold = s.phase === "running" && (s.butterfly || (season === "winter" && m >= s.cocoa_line));
                 $("cashBtn").classList.toggle("gold", gold);
-                $("cashBtn").textContent = s.butterfly ? "CASH OUT 🦋 " + pct("butterfly") : (season === "winter" && m >= s.cocoa_line && s.phase === "running") ? "CASH OUT ☕ " + pct("cocoa") : "CASH OUT";
+                $("cashBtn").textContent = s.butterfly ? tr("cash") + " 🦋 " + pct("butterfly") : (season === "winter" && m >= s.cocoa_line && s.phase === "running") ? tr("cash") + " ☕ " + pct("cocoa") : tr("cash");
             }
             requestAnimationFrame(frame);
         }
@@ -1223,44 +1299,38 @@
         async function openMenu() {
             try { await loadWallet() } catch { }
             showPanel(`
-                <div class="row"><h2>☰ Menu</h2><button class="ghost" style="width:auto" onclick="closePanel()">✕</button></div>
-                <button class="opt" onclick="openWallet()">👛 Wallet: free points, top-up, ticket</button>
-                <button class="opt" onclick="openProfile()">🐱 Profile &amp; cashier code</button>
-                <button class="opt" onclick="openSafePlay()">🛟 Safe play: limits, breaks, self-exclusion</button>
-                <button class="opt" onclick="openHowTo()">❓ How to play</button>
-                ${WAL && WAL.demo_mode ? '<button class="opt" onclick="openDemoReset()">🔄 New demo player</button>' : ""}
-                <button class="ghost" onclick="closePanel()">Back to the game</button>`);
+                <div class="row"><h2>${tr("m.title")}</h2><button class="ghost" style="width:auto" onclick="closePanel()">✕</button></div>
+                <button class="opt" onclick="openWallet()">${tr("m.wallet")}</button>
+                <button class="opt" onclick="openProfile()">${tr("m.profile")}</button>
+                <button class="opt" onclick="openSafePlay()">${tr("m.safe")}</button>
+                <button class="opt" onclick="openHowTo()">${tr("m.howto")}</button>
+                ${WAL && WAL.demo_mode ? `<button class="opt" onclick="openDemoReset()">${tr("m.reset")}</button>` : ""}
+                <button class="opt" onclick="toggleLang(); openMenu()">🌐 ${tr("lang.switch")}</button>
+                <button class="ghost" onclick="closePanel()">${tr("m.back")}</button>`);
         }
         function openSafePlay() {
             showPanel(`
-                <div class="row"><h2>🛟 Safe play</h2><button class="ghost" style="width:auto" onclick="openMenu()">✕</button></div>
-                <b>Catino is a game. Points have no cash value and can't be cashed out.</b>
-                <div class="kv"><span>Decide how long you'll play before you start, and stop when the time is up.</span></div>
-                <div class="kv"><span>Each walk is random. The next walk doesn't know about the last one, so chasing losses never helps.</span></div>
-                <div class="kv"><span>On average the game pays back less than you bet. Playing longer doesn't make a win more likely.</span></div>
-                <div class="kv"><span>Take breaks. If playing stops being fun, or you feel you have to play, stop.</span></div>
-                <button class="big go" onclick="openSafe()">LIMITS, REALITY CHECK &amp; BREAKS</button>
-                <div class="dim">Need to talk to someone? ConnexOntario: call <a href="tel:18665312600" style="color:inherit;font-weight:700">1-866-531-2600</a> or text CONNEX to 247247 (free, 24/7, includes gambling support).</div>
-                <div class="dim">In crisis: call or text 9-8-8 (Canada, 24/7). In danger: call 9-1-1.</div>
-                <button class="ghost" onclick="openMenu()">Back</button>`);
+                <div class="row"><h2>${tr("s.title")}</h2><button class="ghost" style="width:auto" onclick="openMenu()">✕</button></div>
+                <b>${tr("s.points")}</b>
+                ${[1, 2, 3, 4].map(i => `<div class="kv"><span>${tr("s." + i)}</span></div>`).join("")}
+                <button class="big go" onclick="openSafe()">${tr("s.open")}</button>
+                <div class="dim">${tr("s.help", '<a href="tel:18665312600" style="color:inherit;font-weight:700">1-866-531-2600</a>')}</div>
+                <div class="dim">${tr("s.crisis")}</div>
+                <button class="ghost" onclick="openMenu()">${tr("back")}</button>`);
         }
         function openHowTo() {
             showPanel(`
-                <div class="row"><h2>❓ How to play</h2><button class="ghost" style="width:auto" onclick="openMenu()">✕</button></div>
-                <div class="kv"><span>1. While betting is open, pick a bet and tap BET.</span></div>
-                <div class="kv"><span>2. The cat on the big screen starts walking and the multiplier climbs.</span></div>
-                <div class="kv"><span>3. Tap CASH OUT before the cat gets distracted. You win bet × multiplier.</span></div>
-                <div class="kv"><span>4. If the cat gets distracted first, the bet is lost.</span></div>
-                <div class="kv"><span>5. Each season changes one rule. Watch the forecast while betting.</span></div>
-                <div class="dim">Points are not money and can't be cashed out. Take breaks.</div>
-                <button class="big go" onclick="closePanel()">GOT IT</button>`);
+                <div class="row"><h2>${tr("h.title")}</h2><button class="ghost" style="width:auto" onclick="openMenu()">✕</button></div>
+                ${[1, 2, 3, 4, 5].map(i => `<div class="kv"><span>${tr("h." + i)}</span></div>`).join("")}
+                <div class="dim">${tr("h.points")}</div>
+                <button class="big go" onclick="closePanel()">${tr("h.ok")}</button>`);
         }
         function openDemoReset() {
             showPanel(`
-                <h2>🔄 New demo player</h2>
-                <div class="dim">Start over with a fresh wallet and the starting points. Your old wallet stays on the server.</div>
-                <button class="big go" onclick="localStorage.removeItem('kc_pid'); location.reload()">START OVER</button>
-                <button class="ghost" onclick="openMenu()">Cancel</button>`);
+                <h2>${tr("r.title")}</h2>
+                <div class="dim">${tr("r.ask")}</div>
+                <button class="big go" onclick="localStorage.removeItem('kc_pid'); location.reload()">${tr("r.yes")}</button>
+                <button class="ghost" onclick="openMenu()">${tr("cancel")}</button>`);
         }
 
         // profile + signed single-use cashier code
