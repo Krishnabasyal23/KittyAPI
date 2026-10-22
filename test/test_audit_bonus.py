@@ -114,3 +114,14 @@ def test_audit_csv_export():
     new_wallet()
     r = local.get("/api/operator/export/audit.csv")
     assert r.status_code == 200 and r.text.startswith("audit_id,actor,action,wallet_id,detail,created_at")
+
+
+def test_screens_show_the_tuned_bonus_at_once():
+    """The phone's season card and cash button, and the game's banners, read the server's live numbers."""
+    local.put("/api/operator/bonus", json={"butterfly": 2, "cocoa": 3})
+    sid, h = new_wallet()
+    assert client.get("/api/crowd/state").json()["bonus_pct"] == {"butterfly": 2, "cocoa": 3}
+    assert client.get("/api/health").json()["bonus_pct"] == {"butterfly": 2, "cocoa": 3}
+    spring = season_rules.describe("spring")
+    assert "+2%" in spring["rule"] and "+2 %" in season_rules.describe("spring", "fr")["rule"]
+    assert "+3%" in season_rules.describe("winter")["rule"]
