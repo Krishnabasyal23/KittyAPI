@@ -125,7 +125,10 @@ def test_a_stubbed_round_without_a_value_takes_no_seeds(monkeypatch):
         manager.submit_seed(sid, started["round_id"], SEED_A)
 
 
-def test_seeds_and_final_value_survive_a_restart(tmp_path):
+def test_seeds_and_final_value_survive_a_restart(tmp_path, monkeypatch):
+    # a reloaded round stays sealed until its crash time on the wall clock: pretend that time has passed,
+    # so the test doesn't depend on whether the seeds happened to make a 1.00x crash
+    monkeypatch.setattr("round_manager.wall_clock", lambda: 4_000_000_000.0)
     db = tmp_path / "seeds.db"
     initialize_database(db)
     store = WalletStore(db)
