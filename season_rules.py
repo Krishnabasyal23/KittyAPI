@@ -22,8 +22,37 @@ def happy_hour() -> bool:
     return os.getenv("HAPPY_HOUR", "").strip() == "1"
 
 
+# The operator may tune the bonuses between 0 and MAX_SAFE_BONUS_PCT. A strategy that always earns a
+# bonus returns (1 - HOUSE_EDGE) x (1 + bonus), so the cap keeps even that under 100% RTP:
+# 0.96 x 1.04 = 99.84%. HAPPY_HOUR=1 (demo only) still wins over any tuning.
+from crash_engine import HOUSE_EDGE  # noqa: E402
+
+MAX_SAFE_BONUS_PCT = math.floor((1 / (1 - HOUSE_EDGE) - 1) * 100 - 1e-9)
+_tuned: dict | None = None
+
+
+def set_bonus_percents(percents: dict | None) -> dict:
+    """Use these whole-percent bonuses ({"butterfly": 0-4, "cocoa": 0-4}); None = the built-in defaults."""
+    global _tuned
+    if percents is None:
+        _tuned = None
+        return bonus_percents()
+    clean = {}
+    for key in ("butterfly", "cocoa"):
+        value = percents.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= MAX_SAFE_BONUS_PCT:
+            raise ValueError(f"{key} bonus must be a whole number from 0 to {MAX_SAFE_BONUS_PCT}%")
+        clean[key] = value
+    _tuned = clean
+    return bonus_percents()
+
+
 def bonus_factors() -> dict:
-    return HAPPY_HOUR_BONUSES if happy_hour() else SAFE_BONUSES
+    if happy_hour():
+        return HAPPY_HOUR_BONUSES
+    if _tuned is not None:
+        return {k: 1 + v / 100 for k, v in _tuned.items()}
+    return SAFE_BONUSES
 
 
 def bonus_percents() -> dict:

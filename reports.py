@@ -95,6 +95,7 @@ EXPORTS = {
     "bets": f"SELECT * FROM ({BETS}) ORDER BY day",
     "ledger": "SELECT entry_id, wallet_id, kind, amount_points, balance_after, day, round_id, bet_id, reference, created_at "
               "FROM ledger ORDER BY entry_id",
+    "audit": "SELECT audit_id, actor, action, wallet_id, detail, created_at FROM audit_log ORDER BY audit_id",
     "payments": "SELECT payment_id, provider, wallet_id, product, amount_cents, currency, points, status, day, created_at "
                 "FROM payments ORDER BY created_at",
 }

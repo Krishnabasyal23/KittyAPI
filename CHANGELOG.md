@@ -4,6 +4,12 @@ All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+### Added
+- Append-only audit log (migration 0009): cashier top-ups and codes, play-safe changes, ticket
+  locks, operator changes. Shown on the dashboard, `/api/operator/audit`, `audit.csv`.
+- Season bonus tuning on the dashboard (`/api/operator/bonus`): 0-4% each, the cap derived from
+  the house edge so no strategy reaches 100% RTP. Saved in `settings` and loaded at start-up.
+
 ## [2.0.0-beta.1] - 2026-10-22
 
 First beta of v2.

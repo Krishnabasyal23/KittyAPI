@@ -35,7 +35,9 @@ from local_env import load_local_env
 from crowd import CrowdTable, make_router as make_crowd_router
 from season_rules import (
     HAPPY_HOUR_LABEL,
+    MAX_SAFE_BONUS_PCT,
     bonus_percents,
+    set_bonus_percents,
     describe as describe_season,
     happy_hour,
 )
@@ -96,6 +98,12 @@ async def lifespan(app: FastAPI):
 
     # Refund old unfinished rounds once on startup.
     store.recover_interrupted_rounds()
+
+    # Season bonuses tuned by the operator (within the safe cap); a bad stored value falls back to the default.
+    try:
+        set_bonus_percents(store.get_setting(BONUS_SETTING))
+    except ValueError:
+        set_bonus_percents(None)
 
     yield
 
@@ -546,3 +554,40 @@ def operator_export(name: str, days: int = Query(90, ge=1, le=365)):
         conn.close()
     return Response(text, media_type="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="catino-{name}.csv"'})
+
+
+# OPERATOR: season bonus tuning (capped so no strategy reaches 100% RTP) and the audit log
+
+BONUS_SETTING = "season_bonus_pct"
+
+
+class BonusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    butterfly: int
+    cocoa: int
+
+
+def bonus_view() -> dict:
+    return {"bonus_pct": bonus_percents(), "max_pct": MAX_SAFE_BONUS_PCT, "happy_hour": happy_hour(),
+            "default_pct": {"butterfly": 4, "cocoa": 4}}
+
+
+@app.get("/api/operator/bonus", dependencies=[Depends(local_only)])
+def get_bonus():
+    return bonus_view()
+
+
+@app.put("/api/operator/bonus", dependencies=[Depends(local_only)])
+def put_bonus(payload: BonusRequest):
+    """Set the butterfly / cocoa bonus (whole percent, 0 to the safe cap). Saved and written to the audit log."""
+    wanted = {"butterfly": payload.butterfly, "cocoa": payload.cocoa}
+    game_call(set_bonus_percents, wanted)
+    store.set_setting(BONUS_SETTING, wanted)
+    return bonus_view()
+
+
+@app.get("/api/operator/audit", dependencies=[Depends(local_only)])
+def operator_audit(limit: int = Query(100, ge=1, le=1000), wallet_id: str | None = Query(None, max_length=100)):
+    """Newest first: cashier top-ups and codes, play-safe changes, ticket locks, operator changes."""
+    return store.audit_entries(limit, wallet_id)
+
