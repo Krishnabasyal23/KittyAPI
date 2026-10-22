@@ -2,6 +2,14 @@
 
 All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- Season rule texts in French: `GET/POST /api/season/next?lang=fr` and `/api/crowd/state?lang=fr`
+  (bonus numbers are still the server's).
+- Phone page: the wallet, checkout, receipts, history, profile, play-safe, out-of-points and
+  reality-check sheets, and common server messages, follow the French setting.
+
 ## [2.0.0-alpha.12] - 2026-10-22
 
 English / French.
