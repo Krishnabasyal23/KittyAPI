@@ -1,14 +1,16 @@
-"""Mock lottery tickets: a replaceable validator plus a server-side issuer for demos and tests.
+"""Ticket bonus: a player types the code from a demo ticket and gets 25 points, once a day.
 
-A ticket is a server-issued ticket_id and five two-digit numbers, each 01-99, each exactly double
-the previous one (e.g. 01 02 04 08 16). The pattern is always checked here on the server. The same
-numbers may be printed on many tickets; each ticket_id can be redeemed once, globally (enforced by
-the lottery_tickets primary key in the same transaction as the 25-point credit).
+Whether a code is genuine depends only on a secret key (TICKET_SECRET, kept out of git), never on
+anything a player could work out from this file. Without the key, ticket entry is switched off.
+Each code redeems once, globally (lottery_tickets primary key, in the same transaction as the credit).
 
-These are mock tickets only. Nothing here checks, or claims to check, real lottery tickets.
+Players only ever see one message for a code that doesn't verify, whatever the reason.
+These are demo tickets only. Nothing here checks, or claims to check, real lottery tickets.
 """
 
-import re
+import hashlib
+import hmac
+import os
 import secrets
 
 from dataclasses import dataclass
@@ -17,87 +19,79 @@ from typing import Protocol
 from errors import InvalidTicket
 
 TICKET_POINTS = 25
-TICKET_DAILY_MAX = 3
-MOCK_NOTICE = "MOCK TICKET (demo): not a real lottery ticket"
-TICKET_ID = re.compile(r"^MOCK-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$")
+TICKET_DAILY_MAX = 1
+TICKET_MAX_FAILURES = 3          # wrong codes in a row before entry locks
+TICKET_LOCK_MINUTES = 60
+NOT_VERIFIED = "That ticket couldn't be verified"
+TICKET_NOTICE = "Demo ticket: not a real lottery ticket"
+
+_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+_SERIAL, _CHECK = 10, 10
 
 
-def parse_numbers(numbers) -> tuple[int, ...]:
-    """Five two-digit numbers from '01 02 04 08 16', '01-02-04-08-16' or a list of 2-char strings."""
-    parts = re.split(r"[\s,\-]+", numbers.strip()) if isinstance(numbers, str) else list(numbers)
-    if len(parts) != 5:
-        raise InvalidTicket("A ticket has exactly five numbers")
-    values = []
-    for part in parts:
-        text = str(part)
-        if not re.fullmatch(r"\d{2}", text):
-            raise InvalidTicket("Each number has exactly two digits (01-99)")
-        values.append(int(text))
-    return tuple(values)
+def ticket_secret() -> bytes | None:
+    key = os.getenv("TICKET_SECRET", "").strip()
+    return key.encode("utf-8") if len(key) >= 16 else None
 
 
-def check_pattern(values: tuple[int, ...]) -> None:
-    if any(not 1 <= v <= 99 for v in values):
-        raise InvalidTicket("Each number must be between 01 and 99")
-    for previous, current in zip(values, values[1:]):
-        if current != previous * 2:
-            raise InvalidTicket("Each number must be exactly double the previous one")
+def normalise(code) -> str:
+    return "".join(ch for ch in str(code or "").upper() if ch.isalnum())[:64]
 
 
-def format_numbers(values) -> str:
-    return " ".join(f"{v:02d}" for v in values)
+def _check(key: bytes, serial: str) -> str:
+    digest = hmac.new(key, b"ticket:" + serial.encode("ascii"), hashlib.sha256).digest()
+    number = int.from_bytes(digest[:8], "big")
+    return "".join(_ALPHABET[(number >> (5 * i)) & 31] for i in range(_CHECK))
 
 
 @dataclass(frozen=True)
 class TicketCheck:
-    ticket_id: str
-    numbers: str          # normalised, e.g. '01 02 04 08 16'
+    ticket_id: str           # the normalised code, stored once redeemed
 
 
 class LotteryValidator(Protocol):
     name: str
 
-    def validate(self, ticket_id: str, numbers, conn=None) -> TicketCheck:
-        """Raise InvalidTicket unless the ticket exists and carries these numbers in a valid pattern."""
+    def validate(self, code: str, conn=None) -> TicketCheck:
+        """Raise InvalidTicket(NOT_VERIFIED) unless the code is genuine."""
 
 
-class MockLotteryValidator:
-    """Accepts only tickets this server issued (mock_lottery_tickets), with matching numbers."""
+class SignedTicketValidator:
+    name = "signed"
 
-    name = "mock"
+    def __init__(self, key: bytes):
+        self.key = key
 
-    def validate(self, ticket_id: str, numbers, conn=None) -> TicketCheck:
-        ticket_id = (ticket_id or "").strip().upper()
-        if not TICKET_ID.fullmatch(ticket_id):
-            raise InvalidTicket("Unknown ticket id")
-        values = parse_numbers(numbers)
-        check_pattern(values)          # server-side, whatever the issuer printed
+    def validate(self, code: str, conn=None) -> TicketCheck:
+        text = normalise(code)
+        if len(text) != _SERIAL + _CHECK:
+            raise InvalidTicket(NOT_VERIFIED)
+        serial, check = text[:_SERIAL], text[_SERIAL:]
+        if any(ch not in _ALPHABET for ch in text) or not hmac.compare_digest(check, _check(self.key, serial)):
+            raise InvalidTicket(NOT_VERIFIED)
+        return TicketCheck(text)
 
-        row = conn.execute(
-            "SELECT numbers FROM mock_lottery_tickets WHERE ticket_id = ?", (ticket_id,)
-        ).fetchone()
-        if row is None:
-            raise InvalidTicket("Unknown ticket id")
-        if row["numbers"] != format_numbers(values):
-            raise InvalidTicket("Numbers do not match this ticket")
-        return TicketCheck(ticket_id, format_numbers(values))
-
-    def issue(self, conn, numbers=None) -> dict:
-        """Print a mock ticket. Default: a random valid sequence. Tests may pass any 5 two-digit
-        numbers (even an invalid pattern) to prove the server rejects it at redemption."""
-        if numbers is None:
-            start = secrets.randbelow(6) + 1           # 16 x start must stay <= 99
-            values = tuple(start * 2 ** i for i in range(5))
-        else:
-            values = parse_numbers(numbers)
-        ticket_id = "MOCK-" + "-".join(secrets.token_hex(2).upper() for _ in range(3))
-        conn.execute(
-            "INSERT INTO mock_lottery_tickets(ticket_id, numbers) VALUES (?, ?)",
-            (ticket_id, format_numbers(values)),
-        )
-        return {"ticket_id": ticket_id, "numbers": format_numbers(values), "notice": MOCK_NOTICE}
+    def issue(self) -> str:
+        """A new genuine code (development helper, DEMO_MODE only)."""
+        serial = "".join(secrets.choice(_ALPHABET) for _ in range(_SERIAL))
+        text = serial + _check(self.key, serial)
+        return "-".join(text[i:i + 5] for i in range(0, len(text), 5))
 
 
-def lottery_validator(demo: bool) -> LotteryValidator | None:
-    """The active validator, or None when mock tickets are switched off (DEMO_MODE unset)."""
-    return MockLotteryValidator() if demo else None
+def lottery_validator() -> LotteryValidator | None:
+    """The active validator, or None when no TICKET_SECRET is configured."""
+    key = ticket_secret()
+    return SignedTicketValidator(key) if key else None
+
+
+if __name__ == "__main__":       # python lottery.py [count]   (reads TICKET_SECRET; local use only)
+    import sys
+
+    from local_env import load_local_env
+
+    load_local_env()
+    validator = lottery_validator()
+    if validator is None:
+        sys.exit("Set TICKET_SECRET (16+ characters) first")
+    for _ in range(int(sys.argv[1]) if len(sys.argv) > 1 else 5):
+        print(validator.issue())

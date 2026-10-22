@@ -30,6 +30,7 @@ from fairness import NotRevealedYet
 from errors import WalletError
 from randomness import LIVE_RNG_MODES
 from round_manager import RoundManager
+from local_env import load_local_env
 from crowd import CrowdTable, make_router as make_crowd_router
 from season_rules import (
     HAPPY_HOUR_LABEL,
@@ -39,7 +40,10 @@ from season_rules import (
 )
 
 
-VERSION = "2.0.0-alpha.5"
+VERSION = "2.0.0-alpha.6"
+
+
+load_local_env()
 
 
 class StartRoundRequest(BaseModel):
@@ -149,7 +153,16 @@ IdempotencyHeader = Annotated[
     Header(alias="Idempotency-Key"),
 ]
 
-DEMO_NOTICE = "DEMO MODE: payments are simulated and lottery tickets are mock tickets"
+LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
+CASHIER_HTML = Path(__file__).resolve().parent / "cashier.html"
+
+
+def local_only(request: Request) -> None:
+    if request.client is None or request.client.host not in LOCAL_HOSTS:
+        raise HTTPException(status_code=403, detail="Only available on the server computer")
+
+
+DEMO_NOTICE = "DEMO MODE: payments are simulated and tickets are demo tickets"
 
 
 @app.get("/api/health")
@@ -311,19 +324,13 @@ class PurchaseRequest(BaseModel):
 
 class TicketRedeemRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    ticket_id: str = Field(max_length=40)
-    numbers: str = Field(max_length=40, description="five two-digit numbers, e.g. '01 02 04 08 16'")
-
-
-class TicketIssueRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    numbers: str | None = Field(None, max_length=40)
+    code: str = Field(max_length=64, description="the code printed on the ticket")
 
 
 @app.get("/api/wallet")
 def wallet(session_id: SessionHeader):
     """Balance, today's reward availability, products, lottery allowance and limits."""
-    return game_call(store.wallet_summary, session_id, demo=demo_mode())
+    return game_call(store.wallet_summary, session_id, demo=demo_mode(), tickets=lottery_validator() is not None)
 
 
 @app.get("/api/wallet/ledger")
@@ -361,16 +368,17 @@ def purchase(payload: PurchaseRequest, session_id: SessionHeader, idempotency_ke
 @app.post("/api/wallet/lottery/redeem")
 def redeem_ticket(payload: TicketRedeemRequest, session_id: SessionHeader,
                   idempotency_key: IdempotencyHeader = None):
-    result = game_call(store.redeem_lottery_ticket, session_id, payload.ticket_id, payload.numbers,
-                       lottery_validator(demo_mode()), idempotency_key)
+    result = game_call(store.redeem_lottery_ticket, session_id, payload.code, lottery_validator(), idempotency_key)
     crowd.sync_balance(session_id)
     return result
 
 
-@app.post("/api/demo/lottery/tickets", status_code=201)
-def issue_mock_ticket(payload: TicketIssueRequest | None = None):
-    """Print a mock ticket for local demos and tests (DEMO_MODE=1 only). Not a real lottery ticket."""
-    return game_call(store.issue_mock_ticket, lottery_validator(demo_mode()), payload.numbers if payload else None)
+@app.post("/api/demo/lottery/tickets", status_code=201, include_in_schema=False, dependencies=[Depends(local_only)])
+def issue_ticket():
+    """Development helper: a genuine ticket code (DEMO_MODE=1, this computer only)."""
+    if not demo_mode():
+        raise HTTPException(status_code=404, detail="Not Found")
+    return game_call(store.issue_ticket, lottery_validator())
 
 
 # RESPONSIBLE GAMBLING (rules enforced in WalletStore; see responsible.py)
@@ -471,15 +479,6 @@ def profile_qr(session_id: SessionHeader):
 
 
 # CASHIER PAGE (this computer only; counter payments are simulated)
-
-LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
-CASHIER_HTML = Path(__file__).resolve().parent / "cashier.html"
-
-
-def local_only(request: Request) -> None:
-    if request.client is None or request.client.host not in LOCAL_HOSTS:
-        raise HTTPException(status_code=403, detail="Only available on the server computer")
-
 
 class CashierCode(BaseModel):
     model_config = ConfigDict(extra="forbid")

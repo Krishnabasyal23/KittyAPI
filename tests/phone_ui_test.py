@@ -5,7 +5,7 @@ Run from KittyAPI (inside the hackathon conda env), with Google Chrome installed
 
 Starts uvicorn on port 8001 with a throwaway database and DEMO_MODE=1 (never port 8000, never the
 v1 database), drives the page through the Chrome DevTools protocol (join with the 19+ box, wallet,
-daily points, demo checkout, mock ticket, history, play-safe tools, out-of-points, reality check)
+daily points, demo checkout, ticket entry, profile and cashier code, history, play-safe tools, out-of-points, reality check)
 and prints PASS/FAIL per step. Chrome's profile, cache and the screenshots go under
 <project>/.tmp/phone_ui (KITTY_TEST_TMP overrides). Set CHROME_PATH if Chrome is elsewhere.
 """
@@ -48,7 +48,8 @@ async def main():
     with socket.socket() as s:
         if s.connect_ex(("127.0.0.1", 8001)) == 0:
             sys.exit("port 8001 is already in use; stop that server first")
-    env = dict(os.environ, KITTY_DB_PATH=str(DB), DEMO_MODE="1", GAME_RNG_MODE="secure")
+    env = dict(os.environ, KITTY_DB_PATH=str(DB), DEMO_MODE="1", GAME_RNG_MODE="secure",
+               TICKET_SECRET="phone-ui-test-ticket-key-0123456789")
     prefix = Path(sys.prefix)   # conda env DLLs (numpy/qiskit) when the env isn't activated
     env["PATH"] = os.pathsep.join([str(prefix), str(prefix / "Library" / "bin"), env.get("PATH", "")])
     server = subprocess.Popen([sys.executable, "-m", "uvicorn", "main:app", "--port", "8001", "--log-level", "warning"],
@@ -151,18 +152,24 @@ async def main():
             check("receipt shown ($7 -> +56, simulated)", "Receipt (simulated)" in text and "+56" in text and "$7.00" in text, text[:160])
             await shot("04_receipt")
 
-            # mock ticket
-            ticket = httpx.post("http://127.0.0.1:8001/api/demo/lottery/tickets").json()
+            # ticket bonus: typed code, generic refusal, one a day
             await js("openWallet()")
             await asyncio.sleep(1)
-            await js(f"document.getElementById('tId').value={json.dumps(ticket['ticket_id'])}; document.getElementById('tNums').value={json.dumps(ticket['numbers'])}; redeemTicket()")
+            text = await sheet_text()
+            check("ticket entry is a plain text box with a generic placeholder",
+                  await js("document.getElementById('tCode').placeholder") == "Ticket code"
+                  and await js("document.getElementById('tCode').type") == "text")
+            await js("document.getElementById('tCode').value='hello'; redeemTicket()")
+            await asyncio.sleep(1)
+            message = await js("document.getElementById('tMsg').textContent")
+            check("wrong code: generic message", message == "That ticket couldn't be verified", message)
+            code = httpx.post("http://127.0.0.1:8001/api/demo/lottery/tickets").json()["code"]
+            await js(f"document.getElementById('tCode').value={json.dumps(code)}; redeemTicket()")
             await asyncio.sleep(1)
             check("ticket redeemed +25", "+25 points" in await js("document.getElementById('tMsg').textContent"))
             await asyncio.sleep(2)   # the wallet sheet re-renders after a success
-            await js(f"document.getElementById('tId').value={json.dumps(ticket['ticket_id'])}; document.getElementById('tNums').value={json.dumps(ticket['numbers'])}; redeemTicket()")
-            await asyncio.sleep(1)
-            message = await js("document.getElementById('tMsg').textContent")
-            check("same ticket refused", "already redeemed" in message, message)
+            check("one ticket a day", await js("document.querySelector('[onclick=\"redeemTicket()\"]').disabled") is True
+                  and "tomorrow" in await js("document.getElementById('tMsg').textContent"))
 
             # profile + cashier code
             await js("openProfile()")
@@ -181,7 +188,7 @@ async def main():
             await js("openHistory()")
             await asyncio.sleep(1)
             text = await sheet_text()
-            check("history lists receipt and ledger", "Demo top-up" in text and "Mock lottery ticket" in text and "Daily free" in text, text[:200])
+            check("history lists receipt and ledger", "Demo top-up" in text and "Ticket bonus" in text and "Daily free" in text, text[:200])
             await shot("05_history")
 
             # play safe

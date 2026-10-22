@@ -1074,7 +1074,7 @@
         show(); poll(); setInterval(poll, 300); requestAnimationFrame(frame);
     </script>
     <script>
-        // ---------- wallet, demo checkout, mock tickets, play-safe tools (Phase 3) ----------
+        // ---------- wallet, demo checkout, ticket bonus, profile, play-safe tools ----------
         // Every rule (amounts, limits, 19+, cool-off) is enforced by the server; this only shows it.
         let WAL = null, payKey = null, payMethod = "", rcStart = 0, rcNext = 0, oopRound = -1;
 
@@ -1113,13 +1113,15 @@
                     ${esc(p.label)} · $${esc(p.price)} → <b>${p.points} points</b>${p.once_per_day ? " · once a day" : ""}<br>
                     <span class="tiny">DEMO · simulated payment, no money moves${p.available ? "" : " · already bought today"}</span>
                 </button>`).join("") : `<div class="dim">Point packs are off on this server.</div>`;
-            const lottery = WAL.demo_mode ? `
-                <b>Mock lottery ticket</b>
-                <div class="tiny">${WAL.lottery.redeemed_today} of ${WAL.lottery.daily_max} today · ${WAL.lottery.points} points each · mock tickets only, not real lottery tickets</div>
-                <input id="tId" placeholder="Ticket id (MOCK-XXXX-XXXX-XXXX)" autocomplete="off" style="text-transform:uppercase">
-                <input id="tNums" placeholder="Numbers, e.g. 01 02 04 08 16" autocomplete="off" inputmode="numeric">
-                <button class="big go" ${WAL.lottery.available ? "" : "disabled"} onclick="redeemTicket()">REDEEM TICKET</button>
-                <div id="tMsg" class="dim"></div>` : "";
+            const L = WAL.lottery;
+            const ticketNote = L.locked_until ? `Ticket entry is paused until ${esc(until(L.locked_until))}.`
+                : L.redeemed_today >= L.daily_max ? "Today's ticket is redeemed. Come back tomorrow." : "";
+            const lottery = L.enabled ? `
+                <b>Ticket bonus</b>
+                <div class="tiny">${L.points} points, one ticket a day · demo tickets only, not real lottery tickets</div>
+                <input id="tCode" placeholder="Ticket code" aria-label="Ticket code" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" maxlength="64">
+                <button class="big go" ${L.available ? "" : "disabled"} onclick="redeemTicket()">REDEEM TICKET</button>
+                <div id="tMsg" class="dim">${ticketNote}</div>` : "";
             showPanel(`
                 <div class="row"><h2>👛 Wallet</h2><button class="ghost" style="width:auto" onclick="closePanel()">✕</button></div>
                 <div class="kv"><span>Balance</span><b>🪙 ${WAL.balance} points</b></div>
@@ -1140,11 +1142,12 @@
         }
 
         async function redeemTicket() {
-            const ticket_id = ($("tId").value || "").trim().toUpperCase(), numbers = ($("tNums").value || "").trim();
+            const code = ($("tCode").value || "").trim();
+            if (!code) return;
             try {
-                const r = await wapi("POST", "/api/wallet/lottery/redeem", { ticket_id, numbers }, newKey());
-                note("tMsg", `+${r.points} points for ${r.ticket_id} (${r.numbers}). Balance ${r.balance}`); sfx("bonus"); setTimeout(openWallet, 1200); poll();
-            } catch (e) { note("tMsg", e.message, true) }
+                const r = await wapi("POST", "/api/wallet/lottery/redeem", { code }, newKey());
+                note("tMsg", `+${r.points} points! Balance ${r.balance}`); sfx("bonus"); setTimeout(openWallet, 1200); poll();
+            } catch (e) { note("tMsg", e.message, true); $("tCode").value = ""; }
         }
 
         function tuDollars() { const d = Number($("tuAmt").value); return Number.isInteger(d) ? d : NaN; }
@@ -1245,7 +1248,7 @@
         async function openHistory() {
             try {
                 const [receipts, ledger] = await Promise.all([wapi("GET", "/api/wallet/receipts?limit=20"), wapi("GET", "/api/wallet/ledger?limit=30")]);
-                const LABEL = { starting_grant: "Welcome points", daily_free: "Daily free", topup: "Demo top-up", parking_bundle: "Demo parking bundle", lottery_ticket: "Mock lottery ticket", wager: "Bet", payout: "Cash-out", refund: "Refund" };
+                const LABEL = { starting_grant: "Welcome points", daily_free: "Daily free", topup: "Demo top-up", parking_bundle: "Demo parking bundle", lottery_ticket: "Ticket bonus", wager: "Bet", payout: "Cash-out", refund: "Refund" };
                 showPanel(`
                     <div class="row"><h2>🧾 History</h2><button class="ghost" style="width:auto" onclick="openWallet()">✕</button></div>
                     <b>Simulated receipts</b>
@@ -1315,7 +1318,7 @@
                 <h2>Out of points</h2>
                 <div class="dim">You can keep watching the walk. To play again:</div>
                 ${WAL.daily_free.available ? `<button class="big go" onclick="claimDaily()">CLAIM ${WAL.daily_free.points} FREE POINTS</button><div id="dMsg" class="dim"></div>` : '<div class="dim">Free points are back tomorrow.</div>'}
-                ${WAL.demo_mode ? '<button class="opt" onclick="openWallet()">Demo point packs or a mock ticket</button>' : ""}
+                ${WAL.demo_mode || WAL.lottery.enabled ? '<button class="opt" onclick="openWallet()">Top up or enter a ticket</button>' : ""}
                 <button class="opt" onclick="openSafe()">🛟 Take a break</button>
                 <button class="ghost" onclick="closePanel()">Just watch</button>`)).catch(() => { });
         }

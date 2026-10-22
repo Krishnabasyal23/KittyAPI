@@ -12,10 +12,10 @@ from errors import (
     InvalidTicket,
     LimitReached,
     PlayBlocked,
-    TicketAlreadyUsed,
+    TicketLocked,
     WalletError,
 )
-from lottery import MockLotteryValidator, check_pattern, parse_numbers
+from lottery import NOT_VERIFIED, SignedTicketValidator
 from payments import FakePaymentProvider
 
 DAY = ["2026-10-20"]
@@ -36,7 +36,7 @@ def store(tmp_path):
 
 @pytest.fixture
 def mock():
-    return MockLotteryValidator()
+    return SignedTicketValidator(b"unit-test-ticket-key-0123456789")
 
 
 def kinds(store, wallet):
@@ -135,90 +135,87 @@ def test_self_exclusion_blocks_purchases(store):
 
 # MOCK LOTTERY TICKETS
 
-@pytest.mark.parametrize("numbers", ["01 02 04 08 16", "06 12 24 48 96", "03-06-12-24-48", ["05", "10", "20", "40", "80"]])
-def test_valid_doubling_patterns(numbers):
-    check_pattern(parse_numbers(numbers))
-
-
-@pytest.mark.parametrize("numbers, message", [
-    ("01 02 04 08", "exactly five"),
-    ("1 2 4 8 16", "two digits"),
-    ("01 02 04 08 17", "double"),
-    ("07 14 28 56 112", "two digits"),
-    ("00 00 00 00 00", "between 01 and 99"),
-    ("01 03 06 12 24", "double"),
-])
-def test_invalid_patterns_are_refused(numbers, message):
-    with pytest.raises(InvalidTicket, match=message):
-        check_pattern(parse_numbers(numbers))
-
-
-def test_issued_ticket_redeems_for_25_exactly_once(store, mock):
-    ticket = store.issue_mock_ticket(mock)
-    assert ticket["ticket_id"].startswith("MOCK-") and "not a real lottery ticket" in ticket["notice"]
-
-    result = store.redeem_lottery_ticket("w1", ticket["ticket_id"], ticket["numbers"], mock)
-    assert result["points"] == 25 and result["balance"] == 75
-    assert store.get_ledger("w1")[0]["reference"] == ticket["ticket_id"]
-
-    with pytest.raises(TicketAlreadyUsed):
-        store.redeem_lottery_ticket("w2", ticket["ticket_id"], ticket["numbers"], mock)
+def test_genuine_code_redeems_for_25_exactly_once(store, mock):
+    code = store.issue_ticket(mock)["code"]
+    result = store.redeem_lottery_ticket("w1", code, mock)
+    assert result["points"] == 25 and result["balance"] == 75 and "not a real lottery ticket" in result["notice"]
+    with pytest.raises(InvalidTicket, match=NOT_VERIFIED):
+        store.redeem_lottery_ticket("w2", code, mock)          # used: same message as a wrong code
     assert store.balance("w2") == 50
 
 
-def test_same_numbers_on_different_tickets_both_count(store, mock):
-    a = store.issue_mock_ticket(mock, "01 02 04 08 16")
-    b = store.issue_mock_ticket(mock, "01 02 04 08 16")
-    assert a["ticket_id"] != b["ticket_id"]
-    store.redeem_lottery_ticket("w1", a["ticket_id"], a["numbers"], mock)
-    store.redeem_lottery_ticket("w1", b["ticket_id"], b["numbers"], mock)
+def test_codes_are_accepted_however_they_are_typed(store, mock):
+    code = store.issue_ticket(mock)["code"]
+    messy = " " + code.lower().replace("-", " ") + " "
+    assert store.redeem_lottery_ticket("w1", messy, mock)["points"] == 25
+
+
+@pytest.mark.parametrize("wrong", ["", "hello", "0" * 20, "MOCK-0000-0000-0000"])
+def test_wrong_codes_all_get_the_same_message(store, mock, wrong):
+    with pytest.raises(InvalidTicket) as err:
+        store.redeem_lottery_ticket("w1", wrong, mock)
+    assert str(err.value) == NOT_VERIFIED
+
+
+def test_a_code_from_another_key_is_refused(store, mock):
+    other = SignedTicketValidator(b"some-other-key-9876543210").issue()
+    with pytest.raises(InvalidTicket, match=NOT_VERIFIED):
+        store.redeem_lottery_ticket("w1", other, mock)
+
+
+def test_one_ticket_per_wallet_per_day(store, mock):
+    codes = [store.issue_ticket(mock)["code"] for _ in range(3)]
+    store.redeem_lottery_ticket("w1", codes[0], mock)
+    with pytest.raises(LimitReached):
+        store.redeem_lottery_ticket("w1", codes[1], mock)
+    store.redeem_lottery_ticket("w2", codes[1], mock)          # per wallet
+    DAY[0] = "2026-10-21"
+    store.redeem_lottery_ticket("w1", codes[2], mock)          # next day
     assert store.balance("w1") == 100
 
 
-def test_server_checks_the_pattern_and_the_printed_numbers(store, mock):
-    bad = store.issue_mock_ticket(mock, "01 02 04 08 17")   # mis-printed ticket
-    with pytest.raises(InvalidTicket, match="double"):
-        store.redeem_lottery_ticket("w1", bad["ticket_id"], bad["numbers"], mock)
+def test_three_wrong_codes_lock_entry_for_an_hour(store, mock):
+    from datetime import datetime, timedelta, timezone
+    now = [datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)]
+    store.now = lambda: now[0]
+    for _ in range(3):
+        with pytest.raises(InvalidTicket):
+            store.redeem_lottery_ticket("w1", "nope", mock)
+    good = store.issue_ticket(mock)["code"]
+    with pytest.raises(TicketLocked, match="60 min"):
+        store.redeem_lottery_ticket("w1", good, mock)          # even a genuine code waits
+    assert store.wallet_summary("w1", tickets=True)["lottery"]["available"] is False
+    now[0] += timedelta(minutes=59)
+    with pytest.raises(TicketLocked, match="1 min"):
+        store.redeem_lottery_ticket("w1", good, mock)
+    now[0] += timedelta(minutes=2)
+    assert store.redeem_lottery_ticket("w1", good, mock)["points"] == 25
 
-    good = store.issue_mock_ticket(mock, "02 04 08 16 32")
-    with pytest.raises(InvalidTicket, match="do not match"):
-        store.redeem_lottery_ticket("w1", good["ticket_id"], "01 02 04 08 16", mock)
-    with pytest.raises(InvalidTicket, match="Unknown ticket"):
-        store.redeem_lottery_ticket("w1", "MOCK-0000-0000-0000", "01 02 04 08 16", mock)
-    assert store.balance("w1") == 50
 
-
-def test_three_tickets_per_wallet_per_day(store, mock):
-    tickets = [store.issue_mock_ticket(mock) for _ in range(5)]
-    for t in tickets[:3]:
-        store.redeem_lottery_ticket("w1", t["ticket_id"], t["numbers"], mock)
-    with pytest.raises(LimitReached):
-        store.redeem_lottery_ticket("w1", tickets[3]["ticket_id"], tickets[3]["numbers"], mock)
-
-    store.redeem_lottery_ticket("w2", tickets[3]["ticket_id"], tickets[3]["numbers"], mock)  # per wallet
+def test_a_good_code_resets_the_wrong_count(store, mock):
+    for _ in range(2):
+        with pytest.raises(InvalidTicket):
+            store.redeem_lottery_ticket("w1", "nope", mock)
+    store.redeem_lottery_ticket("w1", store.issue_ticket(mock)["code"], mock)
     DAY[0] = "2026-10-21"
-    store.redeem_lottery_ticket("w1", tickets[4]["ticket_id"], tickets[4]["numbers"], mock)
-    assert store.balance("w1") == 50 + 4 * 25
-    assert store.audit() == []
+    for _ in range(2):
+        with pytest.raises(InvalidTicket):
+            store.redeem_lottery_ticket("w1", "nope", mock)
+    assert store.redeem_lottery_ticket("w1", store.issue_ticket(mock)["code"], mock)["points"] == 25
 
 
-def test_lottery_off_without_demo_mode(store, mock):
+def test_daily_limit_is_checked_before_the_code(store, mock):
+    store.redeem_lottery_ticket("w1", store.issue_ticket(mock)["code"], mock)
+    for _ in range(5):                                          # no lock: these never reach validation
+        with pytest.raises(LimitReached):
+            store.redeem_lottery_ticket("w1", "nope", mock)
+
+
+def test_ticket_entry_off_without_a_key(store, mock):
     with pytest.raises(FeatureDisabled):
-        store.issue_mock_ticket(None)
-    ticket = store.issue_mock_ticket(mock)
+        store.issue_ticket(None)
     with pytest.raises(FeatureDisabled):
-        store.redeem_lottery_ticket("w1", ticket["ticket_id"], ticket["numbers"], None)
-
-
-def test_validator_is_replaceable(store):
-    class AlwaysNo:
-        name = "always-no"
-
-        def validate(self, ticket_id, numbers, conn=None):
-            raise InvalidTicket("nope")
-
-    with pytest.raises(InvalidTicket, match="nope"):
-        store.redeem_lottery_ticket("w1", "MOCK-0000-0000-0000", "01 02 04 08 16", AlwaysNo())
+        store.redeem_lottery_ticket("w1", mock.issue(), None)
 
 
 # CONCURRENCY (each worker thread uses its own connection, like the API's threadpool)
@@ -249,20 +246,20 @@ def test_concurrent_daily_claims_pay_once(store):
 
 
 def test_concurrent_redemptions_of_one_ticket_pay_once(store, mock):
-    ticket = store.issue_mock_ticket(mock)
+    code = store.issue_ticket(mock)["code"]
     wallets = [f"racer{i}" for i in range(12)]
     for w in wallets:
         store.ensure_wallet(w, "phone")
-    results = race(12, lambda i: store.redeem_lottery_ticket(wallets[i], ticket["ticket_id"], ticket["numbers"], mock))
+    results = race(12, lambda i: store.redeem_lottery_ticket(wallets[i], code, mock))
     assert sum(r[0] == "ok" for r in results) == 1
     assert sum(store.balance(w) for w in wallets) == 12 * 50 + 25
 
 
 def test_concurrent_tickets_respect_the_daily_cap(store, mock):
-    tickets = [store.issue_mock_ticket(mock) for _ in range(10)]
-    results = race(10, lambda i: store.redeem_lottery_ticket("w1", tickets[i]["ticket_id"], tickets[i]["numbers"], mock))
-    assert sum(r[0] == "ok" for r in results) == 3
-    assert store.balance("w1") == 50 + 3 * 25
+    codes = [store.issue_ticket(mock)["code"] for _ in range(10)]
+    results = race(10, lambda i: store.redeem_lottery_ticket("w1", codes[i], mock))
+    assert sum(r[0] == "ok" for r in results) == 1
+    assert store.balance("w1") == 50 + 25
 
 
 def test_concurrent_same_key_purchases_charge_once(store):

@@ -40,3 +40,8 @@ class IdempotencyConflict(WalletError):
 class PlayBlocked(WalletError):
     """Responsible-gambling settings (self-exclusion, cool-off, spend limit) forbid this."""
     status = 403
+
+
+class TicketLocked(WalletError):
+    """Too many wrong ticket codes in a row: entry is paused for a while."""
+    status = 429

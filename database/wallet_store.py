@@ -16,7 +16,7 @@ import secrets
 from datetime import date, timedelta
 from decimal import Decimal
 from hashlib import sha256
-from math import isfinite
+from math import ceil, isfinite
 from time import time as wall_clock
 
 from fairness import proof_to_columns
@@ -27,10 +27,21 @@ from errors import (
     IdempotencyConflict,
     InsufficientPoints,
     LimitReached,
+    InvalidTicket,
     TicketAlreadyUsed,
+    TicketLocked,
     WalletError,
 )
-from lottery import MOCK_NOTICE, TICKET_DAILY_MAX, TICKET_POINTS, LotteryValidator
+from lottery import (
+    NOT_VERIFIED,
+    TICKET_DAILY_MAX,
+    TICKET_LOCK_MINUTES,
+    TICKET_MAX_FAILURES,
+    TICKET_NOTICE,
+    TICKET_POINTS,
+    LotteryValidator,
+    normalise as normalise_ticket,
+)
 from payments import (
     POINTS_PER_DOLLAR,
     PRODUCTS,
@@ -811,56 +822,87 @@ class WalletStore:
             conn.close()
         return [_receipt(r) for r in rows]
 
-    # MOCK LOTTERY TICKETS
+    # TICKET BONUS (codes typed by the player; see lottery.py)
 
-    def issue_mock_ticket(self, validator, numbers=None) -> dict:
-        if validator is None or not hasattr(validator, "issue"):
-            raise FeatureDisabled("Mock lottery tickets are off (start the server with DEMO_MODE=1)")
-        with self._write() as conn:
-            return validator.issue(conn, numbers)
-
-    def redeem_lottery_ticket(self, wallet_id: str, ticket_id: str, numbers, validator: LotteryValidator | None,
-                              idempotency_key: str | None = None) -> dict:
-        """25 points per valid ticket, at most 3 per wallet per server day, each ticket id once ever.
-        Validation, the redemption record and the credit happen in one transaction."""
+    def issue_ticket(self, validator) -> dict:
+        """A genuine code for local testing (the API only offers this with DEMO_MODE=1)."""
         if validator is None:
-            raise FeatureDisabled("Mock lottery tickets are off (start the server with DEMO_MODE=1)")
-        request = {"ticket_id": str(ticket_id).strip().upper(), "numbers": str(numbers)}
+            raise FeatureDisabled("Ticket entry is off on this server")
+        return {"code": validator.issue(), "notice": TICKET_NOTICE}
+
+    def _ticket_lock(self, conn, wallet_id: str):
+        """(failures so far, locked_until or None) for this wallet; an expired lock counts as none."""
+        row = conn.execute("SELECT failures, locked_until FROM ticket_entry WHERE wallet_id = ?", (wallet_id,)).fetchone()
+        if row is None:
+            return 0, None
+        until = parse_time(row["locked_until"])
+        return row["failures"], until if until and self.now() < until else None
+
+    def _save_ticket_entry(self, conn, wallet_id: str, failures: int, locked_until: str | None) -> None:
+        conn.execute(
+            """
+            INSERT INTO ticket_entry(wallet_id, failures, locked_until) VALUES (?, ?, ?)
+            ON CONFLICT(wallet_id) DO UPDATE SET failures = excluded.failures,
+                locked_until = excluded.locked_until, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+            """,
+            (wallet_id, failures, locked_until),
+        )
+
+    def redeem_lottery_ticket(self, wallet_id: str, code: str, validator: LotteryValidator | None,
+                              idempotency_key: str | None = None) -> dict:
+        """25 points for a genuine code, one per wallet per server day, each code once ever.
+        Three wrong codes in a row lock entry for an hour. Every wrong code gets the same message."""
+        if validator is None:
+            raise FeatureDisabled("Ticket entry is off on this server")
+        request = {"code": normalise_ticket(code)}
+        wrong = False
 
         with self._write() as conn:
             replay = self._replay(conn, wallet_id, idempotency_key, "lottery", request)
             if replay:
                 return replay
             self._require_wallet(conn, wallet_id)
-            ticket = validator.validate(ticket_id, numbers, conn=conn)
-
-            if conn.execute(
-                "SELECT 1 FROM lottery_tickets WHERE ticket_number = ?", (ticket.ticket_id,)
-            ).fetchone():
-                raise TicketAlreadyUsed("This ticket was already redeemed")
+            failures, locked = self._ticket_lock(conn, wallet_id)
+            if locked:
+                minutes = max(1, ceil((locked - self.now()).total_seconds() / 60))
+                raise TicketLocked(f"Ticket entry is paused after too many tries. Try again in {minutes} min")
             day = self.today()
             used_today = conn.execute(
                 "SELECT COUNT(*) FROM lottery_tickets WHERE wallet_id = ? AND day = ?", (wallet_id, day)
             ).fetchone()[0]
             if used_today >= TICKET_DAILY_MAX:
-                raise LimitReached(f"At most {TICKET_DAILY_MAX} tickets per day")
+                raise LimitReached("You've already redeemed today's ticket. Come back tomorrow")
 
-            entry_id, balance = self._post(conn, wallet_id, "lottery_ticket", TICKET_POINTS,
-                                           reference=ticket.ticket_id)
-            conn.execute(
-                "INSERT INTO lottery_tickets(ticket_number, wallet_id, day, entry_id) VALUES (?, ?, ?, ?)",
-                (ticket.ticket_id, wallet_id, day, entry_id),
-            )
-            response = {"kind": "lottery_ticket", "ticket_id": ticket.ticket_id, "numbers": ticket.numbers,
-                        "points": TICKET_POINTS, "balance": balance, "entry_id": entry_id, "day": day,
-                        "redeemed_today": used_today + 1, "daily_max": TICKET_DAILY_MAX,
-                        "validator": validator.name, "notice": MOCK_NOTICE}
-            self._remember(conn, wallet_id, idempotency_key, "lottery", request, response)
-            return response
+            try:
+                ticket = validator.validate(code, conn=conn)
+                if conn.execute("SELECT 1 FROM lottery_tickets WHERE ticket_number = ?", (ticket.ticket_id,)).fetchone():
+                    raise InvalidTicket(NOT_VERIFIED)
+            except InvalidTicket:
+                failures += 1
+                lock = None
+                if failures >= TICKET_MAX_FAILURES:
+                    lock, failures = (self.now() + timedelta(minutes=TICKET_LOCK_MINUTES)).isoformat(), 0
+                self._save_ticket_entry(conn, wallet_id, failures, lock)
+                wrong = True       # committed below, then refused
+            else:
+                entry_id, balance = self._post(conn, wallet_id, "lottery_ticket", TICKET_POINTS,
+                                               reference=ticket.ticket_id)
+                conn.execute(
+                    "INSERT INTO lottery_tickets(ticket_number, wallet_id, day, entry_id) VALUES (?, ?, ?, ?)",
+                    (ticket.ticket_id, wallet_id, day, entry_id),
+                )
+                self._save_ticket_entry(conn, wallet_id, 0, None)
+                response = {"kind": "lottery_ticket", "points": TICKET_POINTS, "balance": balance,
+                            "entry_id": entry_id, "day": day, "redeemed_today": used_today + 1,
+                            "daily_max": TICKET_DAILY_MAX, "notice": TICKET_NOTICE}
+                self._remember(conn, wallet_id, idempotency_key, "lottery", request, response)
+                return response
+        if wrong:
+            raise InvalidTicket(NOT_VERIFIED)
 
     # SUMMARY (what the Phase 3 wallet screen needs in one call)
 
-    def wallet_summary(self, wallet_id: str, demo: bool = False) -> dict:
+    def wallet_summary(self, wallet_id: str, demo: bool = False, tickets: bool = False) -> dict:
         conn = self._connect()
         try:
             wallet = self._require_wallet(conn, wallet_id)
@@ -875,6 +917,7 @@ class WalletStore:
             rg = self._rg(conn, wallet_id)
             spent = self._spent_today(conn, wallet_id)
             topup = self.topup_view(conn, wallet_id, demo)
+            _, ticket_lock = self._ticket_lock(conn, wallet_id)
         finally:
             conn.close()
 
@@ -900,7 +943,9 @@ class WalletStore:
             ],
             "topup": topup,
             "lottery": {"points": TICKET_POINTS, "redeemed_today": tickets_today,
-                        "daily_max": TICKET_DAILY_MAX, "available": demo and tickets_today < TICKET_DAILY_MAX},
+                        "daily_max": TICKET_DAILY_MAX, "enabled": tickets,
+                        "locked_until": ticket_lock.isoformat() if ticket_lock else None,
+                        "available": tickets and tickets_today < TICKET_DAILY_MAX and ticket_lock is None},
             "demo_mode": demo,
             "spent_today": spent,
             "limits": rg.__dict__,
