@@ -41,7 +41,7 @@ from season_rules import (
 )
 
 
-VERSION = "2.0.0-alpha.10"
+VERSION = "2.0.0-alpha.11"
 
 
 load_local_env()
@@ -298,8 +298,9 @@ def pick_next_season(payload: SeasonPick, session_id: SessionHeader):
 
 @app.get("/api/season/next")
 def next_season(session_id: SessionHeader):
-    """Forecast: the season (and its rule) of this player's next walk."""
-    return game_call(lambda: describe_season(manager.peek_next_season(session_id)))
+    """Forecast: the season (and its rule) of this player's next walk, plus the next three in `upcoming`."""
+    seasons = game_call(manager.peek_seasons, session_id)
+    return {**describe_season(seasons[0]), "upcoming": [describe_season(s) for s in seasons]}
 
 
 @app.get("/api/rounds/{round_id}/season")
