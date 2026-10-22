@@ -6,14 +6,18 @@ from decimal import Decimal
 from typing import Annotated
 from unittest import result
 
+from pathlib import Path
+
 from fastapi import (
+    Depends,
     FastAPI,
     Header,
     HTTPException,
     Query,
+    Request,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, ConfigDict
 
 from database.connection import initialize_database
@@ -21,7 +25,7 @@ from database.migrate import status as migration_status
 from database.wallet_store import WalletStore
 from economy import MAX_BET, MIN_BET
 from lottery import lottery_validator
-from payments import demo_mode, payment_provider
+from payments import CashierProvider, demo_mode, payment_provider
 from fairness import NotRevealedYet
 from errors import WalletError
 from randomness import LIVE_RNG_MODES
@@ -35,7 +39,7 @@ from season_rules import (
 )
 
 
-VERSION = "2.0.0-alpha.4"
+VERSION = "2.0.0-alpha.5"
 
 
 class StartRoundRequest(BaseModel):
@@ -129,7 +133,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT"],
     allow_headers=["Content-Type", "X-Session-ID", "Idempotency-Key"],
 )
 
@@ -300,7 +304,8 @@ def leaderboard(
 
 class PurchaseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    product: str = Field(description="topup_5 or parking_5")
+    product: str = Field(description="topup (with amount_dollars) or parking_5")
+    amount_dollars: int | None = Field(None, description="top-up amount in whole dollars")
     confirmed: bool = Field(False, description="the player ticked 'I understand this is a simulated payment'")
 
 
@@ -345,7 +350,8 @@ def purchase(payload: PurchaseRequest, session_id: SessionHeader, idempotency_ke
     """Simulated purchase (DEMO_MODE=1 only). Idempotency-Key and confirmed=true are required."""
     if not payload.confirmed:
         raise HTTPException(status_code=400, detail="Tick the box to confirm this simulated payment")
-    receipt = game_call(store.purchase, session_id, payload.product, payment_provider(), idempotency_key)
+    receipt = game_call(store.purchase, session_id, payload.product, payment_provider(), idempotency_key,
+                        payload.amount_dollars)
     crowd.sync_balance(session_id)
     if receipt["status"] != "succeeded":
         return JSONResponse(status_code=402, content=receipt)
@@ -436,3 +442,71 @@ def self_exclude(payload: SelfExcludeRequest, session_id: SessionHeader):
 def activity(session_id: SessionHeader, since: str = Query(..., max_length=40)):
     """Bets, points wagered / won and net since `since` (ISO-8601), for the reality check."""
     return game_call(store.activity, session_id, since)
+
+
+# PROFILE + SIGNED QR CODE (shown to the cashier)
+
+class ProfileRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nickname: str = Field(max_length=40)
+    avatar: str = Field(max_length=20)
+
+
+@app.get("/api/profile")
+def get_profile(session_id: SessionHeader):
+    return game_call(store.profile, session_id)
+
+
+@app.put("/api/profile")
+def put_profile(payload: ProfileRequest, session_id: SessionHeader):
+    result = game_call(store.save_profile, session_id, payload.nickname, payload.avatar)
+    crowd.rename(session_id, result["nickname"])
+    return result
+
+
+@app.post("/api/profile/qr", status_code=201)
+def profile_qr(session_id: SessionHeader):
+    """A signed QR code that works once, for a few minutes, at the cashier page."""
+    return game_call(store.issue_qr, session_id)
+
+
+# CASHIER PAGE (this computer only; counter payments are simulated)
+
+LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
+CASHIER_HTML = Path(__file__).resolve().parent / "cashier.html"
+
+
+def local_only(request: Request) -> None:
+    if request.client is None or request.client.host not in LOCAL_HOSTS:
+        raise HTTPException(status_code=403, detail="Only available on the server computer")
+
+
+class CashierCode(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(min_length=4, max_length=400)
+
+
+class CashierTopup(CashierCode):
+    amount_dollars: int
+    confirmed: bool = False
+
+
+@app.get("/cashier", response_class=HTMLResponse, include_in_schema=False, dependencies=[Depends(local_only)])
+def cashier_page():
+    return HTMLResponse(CASHIER_HTML.read_text(encoding="utf-8"), headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/cashier/lookup", dependencies=[Depends(local_only)])
+def cashier_lookup(payload: CashierCode):
+    return game_call(store.cashier_lookup, payload.code, demo_mode())
+
+
+@app.post("/api/cashier/topup", dependencies=[Depends(local_only)])
+def cashier_topup(payload: CashierTopup):
+    """Record a simulated counter payment and credit the player's points. Spends the QR code."""
+    if not payload.confirmed:
+        raise HTTPException(status_code=400, detail="Tick the box to confirm this simulated payment")
+    receipt = game_call(store.cashier_topup, payload.code, payload.amount_dollars,
+                        CashierProvider() if demo_mode() else None)
+    crowd.sync_balance(receipt.pop("wallet_id", None) or "")
+    return receipt

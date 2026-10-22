@@ -2,6 +2,23 @@
 
 All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0-alpha.5] - 2026-10-22
+
+Phase 4: profiles, signed single-use QR codes and the cashier page.
+
+### Added
+- `GET/PUT /api/profile`: nickname, cat avatar and play stats (rounds, cash-outs, best, net).
+- `POST /api/profile/qr`: an HMAC-signed QR code (SVG + PNG) plus an 8-character counter code.
+  Each code works once and expires after 5 minutes (`qr_tokens`, migration 0007). `QR_SECRET` sets the key.
+- `/cashier`: local-only page to look up a player's code and record a simulated counter top-up.
+- Phone page: profile sheet with the cashier code and a countdown.
+
+### Changed
+- Top-ups take any whole amount: $1-$100 each, 8 points per $1, at most $200 a day (wallet and
+  cashier together). `{"product": "topup", "amount_dollars": n}`; `topup_5` still works.
+- Migration 0007 rebuilds `payments` (rows copied) so the product and amount checks allow this.
+- `/api/health` reports version `2.0.0-alpha.5`.
+
 ## [2.0.0-alpha.4] - 2026-10-20
 
 Phase 3: wallet UI and play-safe tools.
