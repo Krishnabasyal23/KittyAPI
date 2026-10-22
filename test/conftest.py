@@ -9,6 +9,7 @@ _TEST_DB_DIR = Path(
 )
 _TEST_DB_DIR.mkdir(parents=True, exist_ok=True)
 os.environ["KITTY_DB_PATH"] = str(_TEST_DB_DIR / f"kittycat-test-{os.getpid()}.db")
+os.environ["TICKET_SECRET"] = "test-only-ticket-key-0123456789"      # real keys live in .env.local
 
 import pytest
 

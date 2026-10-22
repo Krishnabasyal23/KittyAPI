@@ -30,9 +30,10 @@ that has the v1 schema.
 | 2 | `0002_rewards_payments.sql` | simulated payment receipts, lottery redemptions, idempotency keys |
 | 3 | `0003_round_fairness_proofs.sql` | fairness-seal columns on rounds |
 | 4 | `0004_responsible_gambling_settings.sql` | per-wallet responsible-gambling settings |
-| 5 | `0005_mock_lottery_tickets.sql` | server-issued mock lottery tickets |
+| 5 | `0005_mock_lottery_tickets.sql` | server-issued mock lottery tickets (unused since 0008) |
 | 6 | `0006_rg_pending_limits.sql` | delayed daily-limit increases (pending value + effective time) |
 | 7 | `0007_profiles_qr_cashier.sql` | profiles, single-use cashier QR codes; payments rebuilt for any-amount top-ups (rows copied) |
+| 8 | `0008_ticket_entry_lock.sql` | ticket entry lock (wrong-code count, locked until) |
 
 ## Rollback procedures
 
