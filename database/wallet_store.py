@@ -11,6 +11,7 @@ Rules every write follows:
 
 import json
 import re
+import secrets
 
 from datetime import date, timedelta
 from decimal import Decimal
@@ -30,7 +31,20 @@ from errors import (
     WalletError,
 )
 from lottery import MOCK_NOTICE, TICKET_DAILY_MAX, TICKET_POINTS, LotteryValidator
-from payments import PRODUCTS, SIMULATED_NOTICE, PaymentProvider
+from payments import (
+    POINTS_PER_DOLLAR,
+    PRODUCTS,
+    SIMULATED_NOTICE,
+    TOPUP_DAILY_CAP_DOLLARS,
+    TOPUP_MAX_DOLLARS,
+    TOPUP_MIN_DOLLARS,
+    TOPUP_PRODUCTS,
+    PaymentProvider,
+    Product,
+    product_label,
+    topup_product,
+)
+import identity
 from responsible import (
     COOL_OFF_HOURS,
     DEFAULT_REALITY_CHECK_MINUTES,
@@ -51,6 +65,8 @@ from .connection import get_connection
 
 
 DAILY_FREE_POINTS = 20
+AVATARS = ("ginger", "black", "white", "grey", "calico", "tabby")
+NICKNAME = re.compile(r"^[A-Za-z0-9 _\-]+$")
 IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9_.:\-]{8,100}$")
 
 
@@ -690,48 +706,99 @@ class WalletStore:
     # SIMULATED PURCHASES
 
     def purchase(self, wallet_id: str, product_id: str, provider: PaymentProvider | None,
-                 idempotency_key: str | None) -> dict:
-        """Simulated purchase. Returns the receipt (status 'succeeded' or 'declined')."""
+                 idempotency_key: str | None, amount_dollars: int | None = None) -> dict:
+        """Simulated purchase. Returns the receipt (status 'succeeded' or 'declined').
+        product 'topup' takes amount_dollars ($1-$100, 8 points per dollar)."""
         if provider is None:
             raise FeatureDisabled("Simulated payments are off (start the server with DEMO_MODE=1)")
         if idempotency_key is None:
             raise WalletError("Purchases need an Idempotency-Key header")
-        product = PRODUCTS.get(product_id)
-        if product is None:
-            raise WalletError(f"Unknown product: {product_id}")
-        request = {"product": product_id}
+        product = self._product(product_id, amount_dollars)
+        request = {"product": product_id, "amount_cents": product.price_cents}
 
         with self._write() as conn:
             replay = self._replay(conn, wallet_id, idempotency_key, "purchase", request)
             if replay:
                 return replay
-            self._require_wallet(conn, wallet_id)
-            self._check_purchase(conn, wallet_id)
-            day = self.today()
-            if product.once_per_day and conn.execute(
-                "SELECT 1 FROM ledger WHERE wallet_id = ? AND kind = ? AND day = ?",
-                (wallet_id, product.ledger_kind, day),
-            ).fetchone():
-                raise LimitReached(f"The {product.label} can be bought once per day")
-
-            result = provider.charge(wallet_id, product, idempotency_key)
-            entry_id, balance = None, self._require_wallet(conn, wallet_id)["balance_points"]
-            if result.status == "succeeded":
-                entry_id, balance = self._post(conn, wallet_id, product.ledger_kind, product.points,
-                                               reference=result.payment_id)
-            conn.execute(
-                """
-                INSERT INTO payments(payment_id, provider, wallet_id, product, amount_cents, points,
-                                     status, day, entry_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (result.payment_id, result.provider, wallet_id, product_id, product.price_cents,
-                 product.points if result.status == "succeeded" else 0, result.status, day, entry_id),
-            )
-            row = conn.execute("SELECT * FROM payments WHERE payment_id = ?", (result.payment_id,)).fetchone()
-            response = {**_receipt(row), "balance": balance}
+            response = self._charge(conn, wallet_id, product, provider, idempotency_key)
             self._remember(conn, wallet_id, idempotency_key, "purchase", request, response)
             return response
+
+    @staticmethod
+    def _product(product_id: str, amount_dollars: int | None) -> Product:
+        if product_id == "topup":
+            if amount_dollars is None:
+                raise WalletError("Choose a top-up amount")
+            try:
+                return topup_product(amount_dollars)
+            except ValueError as exc:
+                raise WalletError(str(exc)) from exc
+        product = PRODUCTS.get(product_id)
+        if product is None:
+            raise WalletError(f"Unknown product: {product_id}")
+        return product
+
+    def _topped_up_today(self, conn, wallet_id: str) -> int:
+        """Dollars of successful top-ups today (wallet screen and cashier together)."""
+        cents = conn.execute(
+            f"""
+            SELECT COALESCE(SUM(amount_cents), 0) FROM payments
+            WHERE wallet_id = ? AND day = ? AND status = 'succeeded'
+              AND product IN ({', '.join('?' for _ in TOPUP_PRODUCTS)})
+            """,
+            (wallet_id, self.today(), *TOPUP_PRODUCTS),
+        ).fetchone()[0]
+        return cents // 100
+
+    def _charge(self, conn, wallet_id: str, product: Product, provider: PaymentProvider,
+                idempotency_key: str) -> dict:
+        """Rules, charge, credit and receipt inside the caller's transaction."""
+        self._require_wallet(conn, wallet_id)
+        self._check_purchase(conn, wallet_id)
+        day = self.today()
+        if product.once_per_day and conn.execute(
+            "SELECT 1 FROM ledger WHERE wallet_id = ? AND kind = ? AND day = ?",
+            (wallet_id, product.ledger_kind, day),
+        ).fetchone():
+            raise LimitReached(f"The {product.label} can be bought once per day")
+        if product.product_id in TOPUP_PRODUCTS:
+            left = TOPUP_DAILY_CAP_DOLLARS - self._topped_up_today(conn, wallet_id)
+            if product.price_cents > left * 100:
+                raise LimitReached(
+                    f"Top-ups are capped at ${TOPUP_DAILY_CAP_DOLLARS} a day (${max(0, left)} left today)")
+
+        result = provider.charge(wallet_id, product, idempotency_key)
+        entry_id, balance = None, self._require_wallet(conn, wallet_id)["balance_points"]
+        if result.status == "succeeded":
+            entry_id, balance = self._post(conn, wallet_id, product.ledger_kind, product.points,
+                                           reference=result.payment_id)
+        conn.execute(
+            """
+            INSERT INTO payments(payment_id, provider, wallet_id, product, amount_cents, points,
+                                 status, day, entry_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (result.payment_id, result.provider, wallet_id, product.product_id, product.price_cents,
+             product.points if result.status == "succeeded" else 0, result.status, day, entry_id),
+        )
+        row = conn.execute("SELECT * FROM payments WHERE payment_id = ?", (result.payment_id,)).fetchone()
+        return {**_receipt(row), "balance": balance}
+
+    def topup_view(self, conn, wallet_id: str, demo: bool) -> dict:
+        used = self._topped_up_today(conn, wallet_id)
+        return {
+            "product_id": "topup",
+            "label": "Demo top-up (any amount)",
+            "currency": "CAD",
+            "points_per_dollar": POINTS_PER_DOLLAR,
+            "min_dollars": TOPUP_MIN_DOLLARS,
+            "max_dollars": TOPUP_MAX_DOLLARS,
+            "daily_cap_dollars": TOPUP_DAILY_CAP_DOLLARS,
+            "topped_up_today_dollars": used,
+            "left_today_dollars": max(0, TOPUP_DAILY_CAP_DOLLARS - used),
+            "available": demo and used < TOPUP_DAILY_CAP_DOLLARS,
+            "simulated": True,
+        }
 
     def get_receipts(self, wallet_id: str, limit: int = 50) -> list[dict]:
         conn = self._connect()
@@ -807,6 +874,7 @@ class WalletStore:
             ).fetchone()[0]
             rg = self._rg(conn, wallet_id)
             spent = self._spent_today(conn, wallet_id)
+            topup = self.topup_view(conn, wallet_id, demo)
         finally:
             conn.close()
 
@@ -828,8 +896,9 @@ class WalletStore:
                     "available": demo and not (p.once_per_day and p.ledger_kind in kinds_today),
                     "simulated": True,
                 }
-                for p in PRODUCTS.values()
+                for p in PRODUCTS.values() if p.product_id not in TOPUP_PRODUCTS
             ],
+            "topup": topup,
             "lottery": {"points": TICKET_POINTS, "redeemed_today": tickets_today,
                         "daily_max": TICKET_DAILY_MAX, "available": demo and tickets_today < TICKET_DAILY_MAX},
             "demo_mode": demo,
@@ -838,6 +907,145 @@ class WalletStore:
             "responsible": self.responsible_view(wallet_id),
             "server_time": self.now().isoformat(),
         }
+
+    # PROFILES
+
+    def profile(self, wallet_id: str) -> dict:
+        conn = self._connect()
+        try:
+            wallet = self._require_wallet(conn, wallet_id)
+            row = conn.execute("SELECT * FROM profiles WHERE wallet_id = ?", (wallet_id,)).fetchone()
+            stats = self._stats(conn, wallet_id)
+        finally:
+            conn.close()
+        return {
+            "wallet_id": wallet_id,
+            "kind": wallet["kind"],
+            "nickname": row["nickname"] if row else wallet["display_name"],
+            "avatar": row["avatar"] if row else AVATARS[0],
+            "avatars": list(AVATARS),
+            "balance": wallet["balance_points"],
+            "member_since": wallet["created_at"],
+            "stats": stats,
+        }
+
+    def save_profile(self, wallet_id: str, nickname: str, avatar: str) -> dict:
+        nickname = " ".join((nickname or "").split())
+        if not 2 <= len(nickname) <= 12 or not NICKNAME.fullmatch(nickname):
+            raise WalletError("Nickname: 2-12 letters, digits, spaces, - or _")
+        if avatar not in AVATARS:
+            raise WalletError(f"Avatar must be one of {', '.join(AVATARS)}")
+        with self._write() as conn:
+            self._require_wallet(conn, wallet_id)
+            conn.execute(
+                """
+                INSERT INTO profiles(wallet_id, nickname, avatar) VALUES (?, ?, ?)
+                ON CONFLICT(wallet_id) DO UPDATE SET nickname = excluded.nickname, avatar = excluded.avatar,
+                    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                """,
+                (wallet_id, nickname, avatar),
+            )
+            conn.execute("UPDATE wallets SET display_name = ? WHERE wallet_id = ?", (nickname, wallet_id))
+        return self.profile(wallet_id)
+
+    @staticmethod
+    def _stats(conn, wallet_id: str) -> dict:
+        rows = [dict(r) for r in conn.execute(
+            """
+            SELECT status, wager_points AS wager, payout_points AS payout, cashout_multiplier AS m
+            FROM rounds WHERE wallet_id = ? AND status IN ('cashed_out', 'crashed')
+            UNION ALL
+            SELECT status, wager_points, payout_points, cashout_multiplier
+            FROM crowd_bets WHERE wallet_id = ? AND status IN ('cashed_out', 'crashed')
+            """,
+            (wallet_id, wallet_id),
+        )]
+        wins = [r for r in rows if r["status"] == "cashed_out"]
+        return {
+            "rounds": len(rows),
+            "wins": len(wins),
+            "best_multiplier": max((float(r["m"]) for r in wins if r["m"]), default=None),
+            "wagered": sum(r["wager"] for r in rows),
+            "net": sum(r["payout"] - r["wager"] for r in rows),
+        }
+
+    # SIGNED SINGLE-USE QR CODES + CASHIER (simulated counter top-ups)
+
+    def issue_qr(self, wallet_id: str) -> dict:
+        expires = self.now() + identity.QR_LIFETIME
+        nonce = secrets.token_hex(16)
+        with self._write() as conn:
+            self._require_wallet(conn, wallet_id)
+            self._check_purchase(conn, wallet_id)
+            for _ in range(5):
+                code = identity.new_counter_code()
+                if not conn.execute("SELECT 1 FROM qr_tokens WHERE counter_code = ?", (code,)).fetchone():
+                    break
+            conn.execute(
+                "INSERT INTO qr_tokens(nonce, counter_code, wallet_id, expires_at) VALUES (?, ?, ?, ?)",
+                (nonce, code, wallet_id, expires.isoformat()),
+            )
+        token = identity.make_token(wallet_id, nonce, int(expires.timestamp()))
+        return {"token": token, "counter_code": f"{code[:4]}-{code[4:]}", "expires_at": expires.isoformat(),
+                "seconds": int(identity.QR_LIFETIME.total_seconds()),
+                "svg": identity.qr_svg(token), "png_base64": identity.qr_png_base64(token)}
+
+    def _qr_row(self, conn, token_or_code: str):
+        """The unused, unexpired qr_tokens row for a scanned token or a typed counter code."""
+        text = (token_or_code or "").strip()
+        if text.startswith(identity.TOKEN_PREFIX + "."):
+            claims = identity.read_token(text)
+            row = claims and conn.execute(
+                "SELECT * FROM qr_tokens WHERE nonce = ? AND wallet_id = ?", (claims["n"], claims["w"])
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM qr_tokens WHERE counter_code = ?", (identity.normalise_counter_code(text),)
+            ).fetchone()
+        if not row:
+            raise WalletError("That code isn't valid")
+        if row["used_at"]:
+            raise TicketAlreadyUsed("That code was already used. Ask the player for a new one")
+        if parse_time(row["expires_at"]) <= self.now():
+            raise WalletError("That code has expired. Ask the player for a new one")
+        return row
+
+    def cashier_lookup(self, token_or_code: str, demo: bool = True) -> dict:
+        conn = self._connect()
+        try:
+            row = self._qr_row(conn, token_or_code)
+            topup = self.topup_view(conn, row["wallet_id"], demo)
+            rg = self._rg(conn, row["wallet_id"])
+        finally:
+            conn.close()
+        player = self.profile(row["wallet_id"])
+        now = self.now()
+        blocked = any(t and now < t for t in (parse_time(rg.cool_off_until), parse_time(rg.self_excluded_until)))
+        return {"nickname": player["nickname"] or "Player", "avatar": player["avatar"],
+                "balance": player["balance"], "expires_at": row["expires_at"], "topup": topup,
+                "age_confirmed": bool(rg.age_confirmed_at), "blocked": blocked}
+
+    def cashier_topup(self, token_or_code: str, amount_dollars: int, provider: PaymentProvider | None) -> dict:
+        """Credit a counter top-up and spend the QR code, in one transaction."""
+        if provider is None:
+            raise FeatureDisabled("Simulated payments are off (start the server with DEMO_MODE=1)")
+        product = self._product("topup", amount_dollars)
+        with self._write() as conn:
+            row = self._qr_row(conn, token_or_code)
+            receipt = self._charge(conn, row["wallet_id"], product, provider, row["nonce"])
+            used = conn.execute(
+                "UPDATE qr_tokens SET used_at = ?, payment_id = ? WHERE nonce = ? AND used_at IS NULL",
+                (self.now().isoformat(), receipt["payment_id"], row["nonce"]),
+            )
+            if used.rowcount != 1:
+                raise TicketAlreadyUsed("That code was already used. Ask the player for a new one")
+            nickname = self._nickname(conn, row["wallet_id"])
+        return {**receipt, "nickname": nickname, "wallet_id": row["wallet_id"]}
+
+    @staticmethod
+    def _nickname(conn, wallet_id: str) -> str:
+        row = conn.execute("SELECT display_name FROM wallets WHERE wallet_id = ?", (wallet_id,)).fetchone()
+        return (row and row[0]) or "Player"
 
     # AUDIT
 
@@ -874,7 +1082,7 @@ def _receipt(row) -> dict:
         "payment_id": row["payment_id"],
         "provider": row["provider"],
         "product": row["product"],
-        "label": PRODUCTS[row["product"]].label if row["product"] in PRODUCTS else row["product"],
+        "label": product_label(row["product"], row["amount_cents"]),
         "price": f"{row['amount_cents'] / 100:.2f}",
         "currency": row["currency"],
         "points": row["points"],

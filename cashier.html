@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catino cashier</title>
+<style>
+  :root { --bg:#f6f3ee; --card:#fff; --ink:#2b2622; --muted:#7a6f66; --accent:#d9822b; --ok:#2f8a4c; --bad:#b33a3a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.4 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:#2b2622; color:#fff; padding:12px 20px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; }
+  .sim { background:#ffcf5c; color:#2b2622; font-weight:700; font-size:12px; padding:3px 8px; border-radius:4px; }
+  main { max-width:560px; margin:24px auto; padding:0 16px; display:grid; gap:16px; }
+  .card { background:var(--card); border-radius:10px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  h2 { font-size:16px; margin:0 0 10px; }
+  label { display:block; font-size:14px; color:var(--muted); margin:8px 0 4px; }
+  input[type=text], input[type=number] { width:100%; font-size:18px; padding:10px; border:1px solid #cfc6bd; border-radius:6px; }
+  button { font-size:16px; padding:10px 16px; border:0; border-radius:6px; background:var(--accent); color:#fff; cursor:pointer; }
+  button.secondary { background:#e8e1d9; color:var(--ink); }
+  button:disabled { opacity:.5; cursor:default; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+  .msg { min-height:1.4em; margin-top:8px; }
+  .msg.bad { color:var(--bad); } .msg.ok { color:var(--ok); }
+  .player { display:flex; gap:14px; align-items:center; }
+  .avatar { width:52px; height:52px; border-radius:50%; display:grid; place-items:center; font-size:26px; background:#f1e3d3; }
+  .big { font-size:22px; font-weight:700; }
+  .muted { color:var(--muted); font-size:14px; }
+  video { width:100%; border-radius:8px; margin-top:10px; background:#000; }
+  .check { display:flex; gap:8px; align-items:flex-start; margin-top:12px; font-size:14px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header><h1>Catino cashier</h1><span class="sim">SIMULATED COUNTER: NO REAL MONEY</span></header>
+<main>
+  <section class="card">
+    <h2>1. Scan the player's code</h2>
+    <label for="code">QR code or counter code</label>
+    <input id="code" type="text" autocomplete="off" autofocus>
+    <div class="row">
+      <button id="lookup">Look up</button>
+      <button id="camera" class="secondary" hidden>Use camera</button>
+    </div>
+    <video id="video" hidden playsinline muted></video>
+    <div id="lookupMsg" class="msg"></div>
+  </section>
+
+  <section class="card" id="playerCard" hidden>
+    <h2>2. Top up</h2>
+    <div class="player">
+      <div class="avatar" id="avatar">🐱</div>
+      <div><div class="big" id="nickname"></div><div class="muted" id="balance"></div></div>
+    </div>
+    <p class="muted" id="limits"></p>
+    <label for="amount">Amount paid at the counter (CAD, whole dollars)</label>
+    <input id="amount" type="number" min="1" max="100" step="1" value="5">
+    <p class="muted" id="points"></p>
+    <label class="check"><input id="confirm" type="checkbox"> I understand this is a simulated payment: no money is taken.</label>
+    <div class="row"><button id="topup" disabled>Credit points</button><button id="cancel" class="secondary">Cancel</button></div>
+    <div id="topupMsg" class="msg"></div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const AVATAR = { ginger:"🟠", black:"⚫", white:"⚪", grey:"🔘", calico:"🟤", tabby:"🟡" };
+let current = null, rate = 8;
+
+async function post(path, body) {
+  const r = await fetch(path, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Something went wrong");
+  return data;
+}
+
+function show(id, text, kind) { const el = $(id); el.textContent = text; el.className = "msg " + (kind || ""); }
+
+async function lookup() {
+  const code = $("code").value.trim();
+  if (!code) return;
+  show("lookupMsg", "Checking...");
+  try {
+    const p = await post("/api/cashier/lookup", { code });
+    current = code; rate = p.topup.points_per_dollar;
+    $("nickname").textContent = p.nickname;
+    $("avatar").textContent = AVATAR[p.avatar] || "🐱";
+    $("balance").textContent = p.balance + " points";
+    $("amount").max = Math.min(p.topup.max_dollars, p.topup.left_today_dollars);
+    $("limits").textContent = `$${p.topup.min_dollars}-$${p.topup.max_dollars} per top-up, $${p.topup.left_today_dollars} of $${p.topup.daily_cap_dollars} left today.`
+      + (p.blocked ? " This player is on a break and can't top up right now." : "")
+      + (!p.age_confirmed ? " The player hasn't confirmed they are 19+ yet." : "");
+    $("playerCard").hidden = false;
+    show("lookupMsg", "Code accepted. It works for one top-up.", "ok");
+    updatePoints();
+  } catch (e) { current = null; $("playerCard").hidden = true; show("lookupMsg", e.message, "bad"); }
+}
+
+function updatePoints() {
+  const d = parseInt($("amount").value, 10);
+  const valid = Number.isInteger(d) && d >= 1 && d <= parseInt($("amount").max, 10);
+  $("points").textContent = valid ? `= ${d * rate} points` : "Enter a whole-dollar amount in range.";
+  $("topup").disabled = !(valid && $("confirm").checked && current);
+}
+
+async function topup() {
+  $("topup").disabled = true;
+  try {
+    const r = await post("/api/cashier/topup", { code: current, amount_dollars: parseInt($("amount").value, 10), confirmed: true });
+    show("topupMsg", `Credited ${r.points} points to ${r.nickname}. New balance ${r.balance}. Receipt ${r.payment_id} (simulated).`, "ok");
+    current = null; $("code").value = ""; $("confirm").checked = false;
+  } catch (e) { show("topupMsg", e.message, "bad"); updatePoints(); }
+}
+
+function reset() { current = null; $("playerCard").hidden = true; $("code").value = ""; show("lookupMsg", ""); show("topupMsg", ""); $("code").focus(); }
+
+$("lookup").onclick = lookup;
+$("code").addEventListener("keydown", e => { if (e.key === "Enter") lookup(); });
+$("amount").oninput = updatePoints; $("confirm").onchange = updatePoints;
+$("topup").onclick = topup; $("cancel").onclick = reset;
+
+// Camera scanning where the browser has a built-in QR reader; a USB scanner types into the box anyway.
+if ("BarcodeDetector" in window && navigator.mediaDevices) {
+  $("camera").hidden = false;
+  $("camera").onclick = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      const video = $("video"); video.srcObject = stream; video.hidden = false; await video.play();
+      const detector = new BarcodeDetector({ formats: ["qr_code"] });
+      const tick = async () => {
+        const found = await detector.detect(video).catch(() => []);
+        if (found.length) {
+          stream.getTracks().forEach(t => t.stop()); video.hidden = true;
+          $("code").value = found[0].rawValue; lookup();
+        } else if (!video.hidden) requestAnimationFrame(tick);
+      };
+      tick();
+    } catch { show("lookupMsg", "The camera isn't available. Type the counter code instead.", "bad"); }
+  };
+}
+</script>
+</body>
+</html>
