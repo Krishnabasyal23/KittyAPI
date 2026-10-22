@@ -71,6 +71,9 @@ Player endpoints take the wallet id in the `X-Session-ID` header: the PC session
 | POST | `/api/profile/qr` | A signed QR code (SVG + PNG) and an 8-character counter code for the cashier. Works once, for 5 minutes |
 | GET | `/cashier` | Cashier page: scan or type the player's code, record a simulated counter payment. **Server computer only** (127.0.0.1) |
 | POST | `/api/cashier/lookup`, `/api/cashier/topup` | Cashier page actions (`{"code"}`, then `{"code", "amount_dollars", "confirmed": true}`); local only, `DEMO_MODE=1` for top-ups |
+| GET | `/operator` | Operator dashboard: live RTP (today, all time, per season), bets, players, top-ups, points, safe-play counts, ledger check, daily charts. **Server computer only**, refreshes every 5 s |
+| GET | `/api/operator/summary?days=14` | The dashboard's numbers as JSON (local only) |
+| GET | `/api/operator/export/{daily,bets,payments,ledger}.csv` | CSV exports (local only) |
 | GET | `/api/leaderboard` | Top balances |
 | GET | `/crowd` | Phone page (crowd mode, up to 60 phones) |
 | POST | `/api/crowd/host`, `/api/crowd/open` | Big screen: become host, open betting |

@@ -17,7 +17,7 @@ from fastapi import (
     Request,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, ConfigDict
 
 from database.connection import initialize_database
@@ -30,6 +30,7 @@ from fairness import NotRevealedYet
 from errors import WalletError
 from randomness import LIVE_RNG_MODES
 from round_manager import RoundManager
+import reports
 from local_env import load_local_env
 from crowd import CrowdTable, make_router as make_crowd_router
 from season_rules import (
@@ -40,7 +41,7 @@ from season_rules import (
 )
 
 
-VERSION = "2.0.0-alpha.9"
+VERSION = "2.0.0-alpha.10"
 
 
 load_local_env()
@@ -509,3 +510,38 @@ def cashier_topup(payload: CashierTopup):
                         CashierProvider() if demo_mode() else None)
     crowd.sync_balance(receipt.pop("wallet_id", None) or "")
     return receipt
+
+
+# OPERATOR DASHBOARD (this computer only, read-only)
+
+OPERATOR_HTML = Path(__file__).resolve().parent / "operator.html"
+
+
+@app.get("/operator", response_class=HTMLResponse, include_in_schema=False, dependencies=[Depends(local_only)])
+def operator_page():
+    return HTMLResponse(OPERATOR_HTML.read_text(encoding="utf-8"), headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/operator/summary", dependencies=[Depends(local_only)])
+def operator_summary(days: int = Query(14, ge=1, le=90)):
+    """Live RTP, rounds, players, top-ups, points and safe-play counts, plus one row per day."""
+    conn = store._connect()
+    try:
+        result = reports.summary(conn, days, store.today())
+    finally:
+        conn.close()
+    result["ledger_ok"] = store.audit() == []
+    result["version"] = VERSION
+    return result
+
+
+@app.get("/api/operator/export/{name}.csv", dependencies=[Depends(local_only)])
+def operator_export(name: str, days: int = Query(90, ge=1, le=365)):
+    """CSV export: daily, bets, ledger or payments."""
+    conn = store._connect()
+    try:
+        text = game_call(reports.export_csv, conn, name, days)
+    finally:
+        conn.close()
+    return Response(text, media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="catino-{name}.csv"'})
