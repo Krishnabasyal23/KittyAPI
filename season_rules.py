@@ -11,7 +11,7 @@ LEAF_STORM_SECONDS = 2.5
 
 # Season bonus multipliers. The default keeps every strategy under 100% RTP: the crash formula
 # returns 96%, and 0.96 x 1.04 = 99.84% even for a player who always takes the bonus
-# (see tests/sim_rtp.py). HAPPY_HOUR=1 restores the generous pitch-demo values (up to ~120% RTP),
+# (see tests/sim_rtp.py). HAPPY_HOUR=1 restores the generous demo values (up to ~120% RTP),
 # for demos only.
 SAFE_BONUSES = {"butterfly": 1.04, "cocoa": 1.04}
 HAPPY_HOUR_BONUSES = {"butterfly": 1.25, "cocoa": 1.10}

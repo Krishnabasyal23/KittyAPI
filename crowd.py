@@ -294,6 +294,7 @@ class CrowdTable:
                 "join_url": self.join_url or "",
                 "history": self.history,
                 "forecast": describe_season(self.forecast) if self.forecast and self.phase == "betting" else None,
+                "forecast_upcoming": [],
                 "rules": None,
                 "butterfly": False,
                 "leaf_storm": False,
@@ -304,6 +305,11 @@ class CrowdTable:
                 # live: if the game screen changes next walk's season (key N), phones see it at once
                 fc = self._peek_forecast()
                 data["forecast"] = describe_season(fc) if fc else None
+                if self.host_session:
+                    try:
+                        data["forecast_upcoming"] = self.manager.peek_seasons(self.host_session)
+                    except (KeyError, AttributeError):
+                        pass
             if self.round is not None and self.phase in ("running", "crashed"):
                 elapsed = now - self.round["start_time"]
                 data["elapsed"] = max(0.0, elapsed)
