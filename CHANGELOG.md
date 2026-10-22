@@ -2,6 +2,16 @@
 
 All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0-alpha.8] - 2026-10-22
+
+Tidier phone page. (2.0.0-alpha.7 was a game-only release.)
+
+### Changed
+- Phone page: a Menu sheet (wallet, profile and cashier code, safe play, how to play, new demo
+  player in `DEMO_MODE`) replaces the play-safe button; "This walk" and "Leaderboard" fold away
+  (the leaderboard starts folded).
+- `/api/health` reports version `2.0.0-alpha.8`.
+
 ## [2.0.0-alpha.6] - 2026-10-22
 
 Ticket bonus with a secret key.
