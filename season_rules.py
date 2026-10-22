@@ -55,8 +55,35 @@ RULES = {
 }
 
 
-def describe(season: str) -> dict:
-    info = dict(RULES.get(season, {"title": "", "axis": "", "rule": ""}))
+RULES_FR = {
+    "spring": {
+        "title": "Chasse au papillon",
+        "axis": "le timing",
+        "rule": "Un papillon doré passe une fois. Encaissez pendant qu'il est là : +{butterfly} %!",
+    },
+    "summer": {
+        "title": "Folie d'été",
+        "axis": "la vitesse",
+        "rule": "40 % de chances que le chat sprinte : le multiplicateur monte beaucoup plus vite!",
+    },
+    "fall": {
+        "title": "Tempête de feuilles",
+        "axis": "l'information",
+        "rule": "Des rafales de feuilles cachent le multiplicateur. Fiez-vous à votre instinct!",
+    },
+    "winter": {
+        "title": "Chocolat chaud",
+        "axis": "la patience",
+        "rule": "Promenade lente et endormie. Encaissez à 2,00x ou plus : +{cocoa} % de bonus chocolat!",
+    },
+}
+LANGS = {"en": RULES, "fr": RULES_FR}
+
+
+def describe(season: str, lang: str = "en") -> dict:
+    """Season, title, axis and rule (lang 'en' or 'fr'; anything else is English)."""
+    rules = LANGS.get(lang, RULES)
+    info = dict(rules.get(season, {"title": "", "axis": "", "rule": ""}))
     info["rule"] = info["rule"].format(**bonus_percents())
     return {"season": season, **info}
 

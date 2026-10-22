@@ -275,7 +275,7 @@ class CrowdTable:
                         p["payout"] = 0
                 self.history = ([round(self.round["crash_point"], 2)] + self.history)[:10]
 
-    def state(self, pid: str = None) -> dict:
+    def state(self, pid: str = None, lang: str = "en") -> dict:
         with self.lock:
             self._tick()
             now = self.clock()
@@ -293,7 +293,7 @@ class CrowdTable:
                 "distraction": "",
                 "join_url": self.join_url or "",
                 "history": self.history,
-                "forecast": describe_season(self.forecast) if self.forecast and self.phase == "betting" else None,
+                "forecast": describe_season(self.forecast, lang) if self.forecast and self.phase == "betting" else None,
                 "forecast_upcoming": [],
                 "rules": None,
                 "butterfly": False,
@@ -304,7 +304,7 @@ class CrowdTable:
             if self.phase == "betting":
                 # live: if the game screen changes next walk's season (key N), phones see it at once
                 fc = self._peek_forecast()
-                data["forecast"] = describe_season(fc) if fc else None
+                data["forecast"] = describe_season(fc, lang) if fc else None
                 if self.host_session:
                     try:
                         data["forecast_upcoming"] = self.manager.peek_seasons(self.host_session)
@@ -317,7 +317,7 @@ class CrowdTable:
                 data["warmup"] = self.round.get("lead_in_seconds") or 0.0
                 data["season"] = self.round.get("season") or ""
                 data["rush"] = bool(self.round.get("rush"))
-                data["rules"] = describe_season(data["season"])
+                data["rules"] = describe_season(data["season"], lang)
                 if self.phase == "running":
                     data.update(season_live(self.round.get("events"), elapsed))
                     data["multiplier"] = _round_multiplier(self.round, elapsed)
@@ -439,7 +439,7 @@ def make_router(table: CrowdTable) -> APIRouter:
         return table.cash_out(body.player_id)
 
     @r.get("/api/crowd/state")
-    def state(player_id: str = ""):
-        return table.state(player_id)
+    def state(player_id: str = "", lang: str = "en"):
+        return table.state(player_id, lang[:5])
 
     return r
