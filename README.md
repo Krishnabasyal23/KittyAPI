@@ -73,7 +73,9 @@ Player endpoints take the wallet id in the `X-Session-ID` header: the PC session
 | POST | `/api/cashier/lookup`, `/api/cashier/topup` | Cashier page actions (`{"code"}`, then `{"code", "amount_dollars", "confirmed": true}`); local only, `DEMO_MODE=1` for top-ups |
 | GET | `/operator` | Operator dashboard: live RTP (today, all time, per season), bets, players, top-ups, points, safe-play counts, ledger check, daily charts. **Server computer only**, refreshes every 5 s |
 | GET | `/api/operator/summary?days=14` | The dashboard's numbers as JSON (local only) |
-| GET | `/api/operator/export/{daily,bets,payments,ledger}.csv` | CSV exports (local only) |
+| GET | `/api/operator/export/{daily,bets,payments,ledger,audit}.csv` | CSV exports (local only) |
+| GET / PUT | `/api/operator/bonus` | Season bonus tuning: `{"butterfly": 0-4, "cocoa": 0-4}` (whole percent). The cap keeps every strategy under 100% RTP; saved, and logged in the audit log (local only) |
+| GET | `/api/operator/audit?limit=100&wallet_id=` | Audit log, newest first (local only) |
 | GET | `/api/leaderboard` | Top balances |
 | GET | `/crowd` | Phone page (crowd mode, up to 60 phones) |
 | POST | `/api/crowd/host`, `/api/crowd/open` | Big screen: become host, open betting |
@@ -102,6 +104,11 @@ Interactive docs: `http://127.0.0.1:8001/docs`.
   `"replayed": true`. The same key with a different request gets 422.
 - **Simulated payments:** `FakePaymentProvider` never contacts a payment network. Every receipt says
   `"simulated": true` with a notice. Real providers would implement `payments.PaymentProvider`.
+- **Audit log:** `audit_log` (migration 0009) is append-only like the ledger. It records cashier
+  top-ups and codes, play-safe changes (19+, limits, reality check, breaks, self-exclusion), ticket
+  locks and operator changes, each in the same transaction as the change itself.
+- **Bonus tuning:** a strategy that always earns a bonus returns 96% x (1 + bonus), so bonuses are
+  capped at 4% (`season_rules.MAX_SAFE_BONUS_PCT`, derived from the house edge). `HAPPY_HOUR=1` still wins.
 - **Cashier codes:** `identity.py` signs `{wallet, nonce, expiry}` with HMAC-SHA256. The
   `qr_tokens` table (migration 0007) makes each code single-use: the top-up and marking the code used
   happen in one transaction. The 8-character counter code under the QR is for typing when there's no

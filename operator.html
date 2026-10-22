@@ -58,6 +58,11 @@
   th:first-child, td:first-child { text-align:left; }
   th { color:var(--text-secondary); font-weight:600; font-size:12px; }
   .ok { color:var(--good); } .bad { color:var(--critical); }
+  .bonus { display:flex; gap:14px; align-items:end; flex-wrap:wrap; }
+  .bonus label { display:grid; gap:4px; color:var(--text-secondary); font-size:13px; }
+  .bonus input { font:inherit; width:90px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--surface-0); color:var(--text-primary); }
+  .bonus button { font:inherit; padding:7px 14px; border:0; border-radius:6px; background:var(--series-1); color:#fff; cursor:pointer; }
+  td.detail { text-align:left; color:var(--text-secondary); font-size:12px; max-width:420px; overflow-wrap:anywhere; }
   [hidden] { display:none !important; }
 </style>
 </head>
@@ -71,6 +76,7 @@
   <a class="btn" href="/api/operator/export/bets.csv">Bets CSV</a>
   <a class="btn" href="/api/operator/export/payments.csv">Payments CSV</a>
   <a class="btn" href="/api/operator/export/ledger.csv">Ledger CSV</a>
+  <a class="btn" href="/api/operator/export/audit.csv">Audit CSV</a>
 </header>
 <main>
   <section class="tiles" id="tiles"></section>
@@ -83,8 +89,19 @@
     <div class="card"><h2>Top-ups per day</h2><p class="note">Simulated dollars, wallet screen and cashier together</p>
       <div class="chart" id="cTopup"></div></div>
   </section>
+  <section class="card"><h2>Bonus tuning</h2>
+    <p class="note" id="bonusNote"></p>
+    <div class="bonus">
+      <label>Butterfly bonus % <input id="bButterfly" type="number" min="0" step="1"></label>
+      <label>Hot cocoa bonus % <input id="bCocoa" type="number" min="0" step="1"></label>
+      <button id="bSave">Save</button>
+      <span id="bMsg" class="muted"></span>
+    </div>
+  </section>
   <section class="card"><h2>Seasons</h2><div class="table-wrap"><table id="seasons"></table></div></section>
   <section class="card"><h2>Days</h2><div class="table-wrap"><table id="daily"></table></div></section>
+  <section class="card"><h2>Audit log</h2><p class="note">Newest first: cashier, play-safe, ticket and operator actions (append-only)</p>
+    <div class="table-wrap"><table id="audit"></table></div></section>
 </main>
 <script>
 const $ = id => document.getElementById(id);
@@ -194,6 +211,33 @@ function draw(d) {
   table("seasons", [["Season", "season"], ["Bets", "bets", fmt], ["Wagered", "wagered", fmt], ["Paid back", "paid", fmt], ["RTP", "rtp", pct]], d.rtp.by_season);
   table("daily", [["Day", "day"], ["Bets", "bets", fmt], ["Players", "players", fmt], ["Wagered", "wagered", fmt], ["Paid back", "paid", fmt], ["RTP", "rtp", pct], ["Top-ups", "topups", fmt], ["Top-up $", "topup_dollars", fmt], ["Top-up points", "topup_points", fmt]], [...d.daily].reverse());
 }
+
+async function loadBonus() {
+  const b = await (await fetch("/api/operator/bonus", { cache: "no-store" })).json();
+  $("bButterfly").max = $("bCocoa").max = b.max_pct;
+  if (document.activeElement !== $("bButterfly") && document.activeElement !== $("bCocoa")) {
+    $("bButterfly").value = b.bonus_pct.butterfly; $("bCocoa").value = b.bonus_pct.cocoa;
+  }
+  $("bonusNote").textContent = b.happy_hour
+    ? "HAPPY HOUR (demo) is on: its bonuses apply until the server restarts without HAPPY_HOUR=1."
+    : `0 to ${b.max_pct}% each (default ${b.default_pct.butterfly}%). The cap keeps every strategy under 100% RTP. Changes apply to the next walk and go in the audit log.`;
+}
+$("bSave").onclick = async () => {
+  const body = { butterfly: Number($("bButterfly").value), cocoa: Number($("bCocoa").value) };
+  const r = await fetch("/api/operator/bonus", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  $("bMsg").textContent = r.ok ? "Saved" : (typeof j.detail === "string" ? j.detail : "Whole numbers in range only");
+  $("bMsg").className = r.ok ? "ok" : "bad";
+  loadBonus(); loadAudit();
+};
+async function loadAudit() {
+  const rows = await (await fetch("/api/operator/audit?limit=50", { cache: "no-store" })).json();
+  const esc = t => String(t ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  $("audit").innerHTML = "<tr><th>Time</th><th>Who</th><th>Action</th><th>Wallet</th><th>Details</th></tr>" + rows.map(r =>
+    `<tr><td>${esc(new Date(r.created_at).toLocaleString())}</td><td>${esc(r.actor)}</td><td>${esc(r.action)}</td><td>${esc((r.wallet_id || "").slice(0, 8))}</td><td class="detail">${esc(JSON.stringify(r.detail))}</td></tr>`).join("");
+}
+loadBonus(); loadAudit();
+setInterval(() => { loadBonus(); loadAudit(); }, 5000);
 
 $("days").onchange = load;
 addEventListener("resize", () => last && draw(last));

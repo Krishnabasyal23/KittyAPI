@@ -201,6 +201,7 @@ class WalletStore:
             current = self._rg(conn, wallet_id).__dict__
             if not current["age_confirmed_at"]:
                 current["age_confirmed_at"] = self.now().isoformat()
+                self._audit(conn, "player", "age_confirmed", wallet_id)
             return self._save_rg(conn, wallet_id, current)
 
     def set_spend_limit(self, wallet_id: str, points: int | None) -> RGSettings:
@@ -223,6 +224,8 @@ class WalletStore:
             else:
                 current["pending_daily_spend_limit_points"] = None    # same as now: cancel any pending raise
                 current["pending_limit_effective_at"] = None
+            self._audit(conn, "player", "spend_limit_set", wallet_id, requested=points, was=limit,
+                        now=current["daily_spend_limit_points"], pending_from=current["pending_limit_effective_at"])
             return self._save_rg(conn, wallet_id, current)
 
     def set_reality_check(self, wallet_id: str, minutes: int) -> RGSettings:
@@ -230,6 +233,7 @@ class WalletStore:
             raise WalletError(f"Reality check every {', '.join(map(str, REALITY_CHECK_MINUTES))} minutes")
         with self._write() as conn:
             self._require_wallet(conn, wallet_id)
+            self._audit(conn, "player", "reality_check_set", wallet_id, minutes=minutes)
             return self._save_rg(conn, wallet_id, self._rg(conn, wallet_id).__dict__ | {"reality_check_minutes": minutes})
 
     def _extend_until(self, wallet_id: str, field: str, length: timedelta) -> RGSettings:
@@ -240,6 +244,8 @@ class WalletStore:
             existing = parse_time(current[field])
             if existing is None or existing < until:      # extend only, never shorten
                 current[field] = until.isoformat()
+            action = "cool_off_started" if field == "cool_off_until" else "self_excluded"
+            self._audit(conn, "player", action, wallet_id, until=current[field], requested_hours=length.total_seconds() / 3600)
             return self._save_rg(conn, wallet_id, current)
 
     def start_cool_off(self, wallet_id: str, hours: int) -> RGSettings:
@@ -882,6 +888,7 @@ class WalletStore:
                 lock = None
                 if failures >= TICKET_MAX_FAILURES:
                     lock, failures = (self.now() + timedelta(minutes=TICKET_LOCK_MINUTES)).isoformat(), 0
+                    self._audit(conn, "system", "ticket_entry_locked", wallet_id, until=lock)
                 self._save_ticket_entry(conn, wallet_id, failures, lock)
                 wrong = True       # committed below, then refused
             else:
@@ -1030,6 +1037,7 @@ class WalletStore:
                 "INSERT INTO qr_tokens(nonce, counter_code, wallet_id, expires_at) VALUES (?, ?, ?, ?)",
                 (nonce, code, wallet_id, expires.isoformat()),
             )
+            self._audit(conn, "player", "cashier_code_issued", wallet_id, expires_at=expires.isoformat())
         token = identity.make_token(wallet_id, nonce, int(expires.timestamp()))
         return {"token": token, "counter_code": f"{code[:4]}-{code[4:]}", "expires_at": expires.isoformat(),
                 "seconds": int(identity.QR_LIFETIME.total_seconds()),
@@ -1084,6 +1092,8 @@ class WalletStore:
             )
             if used.rowcount != 1:
                 raise TicketAlreadyUsed("That code was already used. Ask the player for a new one")
+            self._audit(conn, "cashier", "cashier_topup", row["wallet_id"], dollars=amount_dollars,
+                        points=receipt["points"], payment_id=receipt["payment_id"], status=receipt["status"])
             nickname = self._nickname(conn, row["wallet_id"])
         return {**receipt, "nickname": nickname, "wallet_id": row["wallet_id"]}
 
@@ -1092,7 +1102,47 @@ class WalletStore:
         row = conn.execute("SELECT display_name FROM wallets WHERE wallet_id = ?", (wallet_id,)).fetchone()
         return (row and row[0]) or "Player"
 
-    # AUDIT
+    # AUDIT LOG + OPERATOR SETTINGS (migration 0009)
+
+    @staticmethod
+    def _audit(conn, actor: str, action: str, wallet_id: str | None = None, **detail) -> None:
+        """Append one audit row inside the caller's transaction (so it exists only if the change does)."""
+        conn.execute(
+            "INSERT INTO audit_log(actor, action, wallet_id, detail) VALUES (?, ?, ?, ?)",
+            (actor, action, wallet_id, json.dumps(detail, sort_keys=True, default=str)),
+        )
+
+    def audit_entries(self, limit: int = 100, wallet_id: str | None = None) -> list[dict]:
+        conn = self._connect()
+        try:
+            sql = "SELECT * FROM audit_log" + (" WHERE wallet_id = ?" if wallet_id else "") + " ORDER BY audit_id DESC LIMIT ?"
+            rows = conn.execute(sql, ((wallet_id,) if wallet_id else ()) + (limit,)).fetchall()
+        finally:
+            conn.close()
+        return [{**dict(r), "detail": json.loads(r["detail"])} for r in rows]
+
+    def get_setting(self, key: str, default=None):
+        conn = self._connect()
+        try:
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        finally:
+            conn.close()
+        return default if row is None else json.loads(row[0])
+
+    def set_setting(self, key: str, value, actor: str = "operator") -> None:
+        with self._write() as conn:
+            old = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+            conn.execute(
+                """
+                INSERT INTO settings(key, value) VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                """,
+                (key, json.dumps(value, sort_keys=True)),
+            )
+            self._audit(conn, actor, "setting_changed", key=key,
+                        old=None if old is None else json.loads(old[0]), new=value)
+
+    # LEDGER AUDIT
 
     def audit(self) -> list[dict]:
         """Wallets whose balance does not equal the sum of their ledger, or whose chain is broken. [] = healthy."""
