@@ -4,7 +4,13 @@ All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+## [2.0.0-beta.2] - 2026-10-22
+
 ### Added
+- Phone picture tour: how to play in four animated slides with no words (bet, the walk, cash out in
+  time, distracted). Shown once after the first join and from Menu > How to play; the written rules
+  moved to Menu > Rules.
+- `/api/health` reports version `2.0.0-beta.2`.
 - Phones get the crowd state over a WebSocket (`/ws/crowd`) instead of polling every 0.3 s; they go
   back to polling while the socket is down and reconnect every 3 s.
 - Append-only audit log (migration 0009): cashier top-ups and codes, play-safe changes, ticket
