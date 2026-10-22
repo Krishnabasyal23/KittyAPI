@@ -190,6 +190,11 @@ async def main():
             text = await sheet_text()
             check("menu lists how to play, safe play, demo reset", "How to play" in text and "Safe play" in text and "New demo player" in text, text[:200])
             await shot("04c_menu")
+            await js("openSafePlay()")
+            await asyncio.sleep(0.5)
+            text = await sheet_text()
+            check("safe play page: plain advice + helpline", "no cash value" in text and "1-866-531-2600" in text and "9-8-8" in text, text[:200])
+            await shot("04d_safe_play")
 
             # history
             await js("openHistory()")

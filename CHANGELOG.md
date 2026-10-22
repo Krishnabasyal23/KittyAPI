@@ -2,6 +2,17 @@
 
 All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0-alpha.9] - 2026-10-22
+
+Safe play page.
+
+### Added
+- Phone menu > Safe play: short plain-language advice (points have no cash value, each walk is
+  random, the game pays back less than you bet on average, take breaks), the limits and breaks
+  tools, and helplines: ConnexOntario 1-866-531-2600 / text CONNEX to 247247 (24/7) and 9-8-8
+  (call or text, 24/7). Numbers checked on connexontario.ca and 988.ca on 2026-10-22.
+- `/api/health` reports version `2.0.0-alpha.9`.
+
 ## [2.0.0-alpha.8] - 2026-10-22
 
 Tidier phone page. (2.0.0-alpha.7 was a game-only release.)
