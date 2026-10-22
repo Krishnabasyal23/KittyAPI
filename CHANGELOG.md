@@ -2,6 +2,19 @@
 
 All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0-alpha.11] - 2026-10-22
+
+Three-season forecast.
+
+### Added
+- `GET /api/season/next` adds `upcoming`: the next three walks' seasons with their rules. They are
+  rolled in advance per session and used in that order; the host's pick (key N) changes only the next
+  one. Crowd state adds `forecast_upcoming`; the phone shows "Then: ..." under the forecast.
+
+### Changed
+- Docs no longer describe the season bonuses in terms of a past event.
+- `/api/health` reports version `2.0.0-alpha.11`.
+
 ## [2.0.0-alpha.10] - 2026-10-22
 
 Operator dashboard.
@@ -158,4 +171,4 @@ Phase 1a: safety groundwork for v2. The v1 demo (`v1.0-pitch`) is unchanged.
 
 ## [1.0-pitch]
 
-Frozen release shown at the pitch.
+Frozen v1 release.
