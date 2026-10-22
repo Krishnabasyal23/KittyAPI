@@ -195,6 +195,13 @@ async def main():
             text = await sheet_text()
             check("safe play page: plain advice + helpline", "no cash value" in text and "1-866-531-2600" in text and "9-8-8" in text, text[:200])
             await shot("04d_safe_play")
+            await js("toggleLang(); openMenu()")
+            await asyncio.sleep(0.5)
+            text = await sheet_text()
+            check("French menu", "Comment jouer" in text and "Jeu responsable" in text, text[:200])
+            check("French bet button", (await js("document.getElementById('betBtn').textContent")).startswith("MISER"))
+            await shot("04e_menu_fr")
+            await js("toggleLang(); closePanel()")
 
             # history
             await js("openHistory()")
