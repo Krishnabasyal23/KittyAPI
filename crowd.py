@@ -9,7 +9,7 @@ import uuid
 
 from pathlib import Path
 
-from fastapi import APIRouter, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
@@ -18,6 +18,7 @@ from crash_engine import SEASON_GROWTH, MIN_CRASH_SECONDS, multiplier_at
 from economy import MIN_BET, MAX_BET, calculate_cashout, validate_points
 from errors import WalletError
 from fairness import NotRevealedYet
+import guard
 from season_rules import describe as describe_season, live as season_live, apply_bonus as season_bonus, bonus_percents, COCOA_LINE
 
 MAX_PLAYERS = 60
@@ -464,11 +465,11 @@ def make_router(table: CrowdTable) -> APIRouter:
             raise HTTPException(status_code=404, detail="Not found")
         return FileResponse(path, headers={"Cache-Control": "max-age=3600"})
 
-    @r.post("/api/crowd/host")
+    @r.post("/api/crowd/host", dependencies=[Depends(guard.host_only)])
     def host(request: Request, body: HostBody | None = None, session_id: str = Header(alias="X-Session-ID")):
         return table.set_host(session_id, request.url.port or 8000, body.name if body else "")
 
-    @r.post("/api/crowd/open")
+    @r.post("/api/crowd/open", dependencies=[Depends(guard.host_only)])
     def open_betting(body: OpenBody, session_id: str = Header(alias="X-Session-ID")):
         return table.open_betting(session_id, body.seconds)
 
@@ -500,6 +501,10 @@ def make_router(table: CrowdTable) -> APIRouter:
     async def state_stream(ws: WebSocket, player_id: str = "", lang: str = "en"):
         """The same state as /api/crowd/state, pushed up to 5 times a second, only when it changed.
         Phones use this instead of polling and fall back to polling if the socket drops."""
+        key = guard.client_key((ws.client.host, ws.client.port) if ws.client else None, ws.headers)
+        if not guard.ws_acquire(key):
+            await ws.close(code=1013)                 # too many open connections: the phone falls back to polling
+            return
         await ws.accept()
         last = None
         try:
@@ -512,5 +517,7 @@ def make_router(table: CrowdTable) -> APIRouter:
                 await asyncio.sleep(PUSH_SECONDS)
         except (WebSocketDisconnect, RuntimeError, OSError):
             pass                                  # the phone left or the connection dropped
+        finally:
+            guard.ws_release(key)
 
     return r

@@ -23,6 +23,7 @@ certs/
 # Tool output and scratch space
 *.log
 .tmp/
+!.env.example
 .pytest_cache/
 web/
 

@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+.tmp
+__pycache__
+*.pyc
+data
+test
+tests
+tools/__pycache__

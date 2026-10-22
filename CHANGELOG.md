@@ -2,9 +2,18 @@
 
 All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [2.0.0-beta.3] - 2026-10-22
 
 ### Added
+- Public mode (`PUBLIC_MODE=1`) for a server that is reachable from the internet, see docs/DEPLOY.md. The
+  cashier, operator pages and demo helpers close completely (a tunnel forwards from 127.0.0.1, so "local"
+  is no proof), only the game on the server computer may host the crowd table, every visitor is rate limited
+  by their real address (wallet creation, join, bets, seeds), request bodies are capped, WebSockets are
+  limited per visitor and in total, and simulated purchases need `ALLOW_PUBLIC_DEMO=1` as well as `DEMO_MODE=1`.
+- The cashier and operator pages now also refuse any request that carries proxy headers or a non-local Host.
+- Safe response headers on every reply (nosniff, no-referrer, frame deny).
+- `tools/db_tools.py`: backup (safe while running), reset (renames the file, never deletes) and list.
+- Deploy files: `requirements.txt`, `Dockerfile`, `render.yaml`, `fly.toml`, `Caddyfile`, `.env.example`.
 - Player seeds (Schrödinger's Box). The server still commits to its value first; every rider's device then
   sends a random seed during the 3 s lead-in and the crash point comes from `value XOR mask(seeds)`, so
   neither the server nor a player can steer it. `POST /api/rounds/{id}/seed`, `POST /api/crowd/seed`,

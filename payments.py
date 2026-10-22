@@ -16,7 +16,10 @@ SIMULATED_NOTICE = "SIMULATED PAYMENT (demo): no money was charged"
 
 
 def demo_mode() -> bool:
-    return os.getenv("DEMO_MODE", "").strip() == "1"
+    """Simulated purchases. On a public server (PUBLIC_MODE=1) they also need ALLOW_PUBLIC_DEMO=1."""
+    if os.getenv("DEMO_MODE", "").strip() != "1":
+        return False
+    return os.getenv("PUBLIC_MODE", "").strip() != "1" or os.getenv("ALLOW_PUBLIC_DEMO", "").strip() == "1"
 
 
 @dataclass(frozen=True)

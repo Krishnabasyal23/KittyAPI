@@ -1,0 +1,23 @@
+# Render blueprint. The database needs a persistent disk, which is a paid Render feature;
+# without it the wallets reset whenever the service restarts (fine for a short demo).
+services:
+  - type: web
+    name: catino
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: catino-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PUBLIC_MODE
+        value: "1"
+      - key: KITTY_DB_PATH
+        value: /data/catino-v2.db
+      - key: TICKET_SECRET
+        generateValue: true
+      - key: QR_SECRET
+        generateValue: true
+      - key: PUBLIC_URL
+        sync: false
