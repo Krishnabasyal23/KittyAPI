@@ -1101,7 +1101,14 @@
         // wallet home
         async function openWallet() {
             try { await loadWallet() } catch (e) { showPanel(`<h2>Wallet</h2><div class="warn">${esc(e.message)}</div><button class="ghost" onclick="closePanel()">Close</button>`); return; }
-            const packs = WAL.demo_mode ? WAL.products.map(p => `
+            const t = WAL.topup;
+            const topup = WAL.demo_mode ? `
+                <b>Demo top-up</b>
+                <div class="tiny">$${t.min_dollars}-$${t.max_dollars} · ${t.points_per_dollar} points per $1 · $${t.left_today_dollars} of $${t.daily_cap_dollars} left today · simulated, no money moves</div>
+                <input id="tuAmt" type="number" min="${t.min_dollars}" max="${Math.min(t.max_dollars, t.left_today_dollars)}" step="1" value="5" inputmode="numeric" oninput="tuPreview()" aria-label="Top-up amount in dollars">
+                <button class="big go" ${t.available ? "" : "disabled"} onclick="openTopup()">TOP UP</button>
+                <div id="tuMsg" class="dim"></div>` : "";
+            const packs = WAL.demo_mode ? topup + WAL.products.map(p => `
                 <button class="opt" ${p.available ? "" : "disabled"} onclick="openPay('${p.product_id}')">
                     ${esc(p.label)} · $${esc(p.price)} → <b>${p.points} points</b>${p.once_per_day ? " · once a day" : ""}<br>
                     <span class="tiny">DEMO · simulated payment, no money moves${p.available ? "" : " · already bought today"}</span>
@@ -1122,6 +1129,7 @@
                 ${WAL.demo_mode ? '<div class="demo">DEMO MODE: payments are simulated. No real money is ever charged.</div>' : ""}
                 ${packs}
                 ${lottery}
+                <button class="ghost" onclick="openProfile()">🐱 Profile &amp; cashier code</button>
                 <button class="ghost" onclick="openHistory()">🧾 Receipts &amp; history</button>
                 <button class="ghost" onclick="openSafe()">🛟 Play safe tools</button>`);
         }
@@ -1139,9 +1147,22 @@
             } catch (e) { note("tMsg", e.message, true) }
         }
 
+        function tuDollars() { const d = Number($("tuAmt").value); return Number.isInteger(d) ? d : NaN; }
+        function tuPreview() {
+            const d = tuDollars(), t = WAL.topup;
+            note("tuMsg", d >= t.min_dollars && d <= Math.min(t.max_dollars, t.left_today_dollars) ? `$${d} → ${d * t.points_per_dollar} points` : `Whole dollars, $${t.min_dollars}-$${Math.min(t.max_dollars, t.left_today_dollars)}`, !(d >= t.min_dollars && d <= Math.min(t.max_dollars, t.left_today_dollars)));
+        }
+        function openTopup() {
+            const d = tuDollars(), t = WAL.topup;
+            if (!(d >= t.min_dollars && d <= Math.min(t.max_dollars, t.left_today_dollars))) { tuPreview(); return; }
+            openPay("topup", d);
+        }
+
         // demo checkout: generic methods, explicit "simulated" checkbox, one idempotency key per checkout
-        function openPay(productId) {
-            const p = WAL.products.find(x => x.product_id === productId);
+        function openPay(productId, dollars) {
+            const p = productId === "topup"
+                ? { product_id: "topup", label: `$${dollars} demo top-up`, price: dollars.toFixed(2), currency: "CAD", points: dollars * WAL.topup.points_per_dollar }
+                : WAL.products.find(x => x.product_id === productId);
             payKey = newKey(); payMethod = "";
             showPanel(`
                 <div class="row"><h2>Demo checkout</h2><button class="ghost" style="width:auto" onclick="openWallet()">✕</button></div>
@@ -1152,16 +1173,18 @@
                 <button class="opt" id="m_wallet" onclick="pickMethod('wallet')">📱 Phone wallet (demo)</button>
                 <button class="opt" id="m_card" onclick="pickMethod('card')">💳 Card (demo)</button>
                 <label class="check"><input type="checkbox" id="payOk" onchange="payReady()"> I understand this is a simulated demo payment and no real money will be charged.</label>
-                <button class="big go" id="payBtn" disabled onclick="pay('${p.product_id}')">PAY $${esc(p.price)} (DEMO)</button>
+                <button class="big go" id="payBtn" disabled onclick="pay('${p.product_id}', ${dollars || 0})">PAY $${esc(p.price)} (DEMO)</button>
                 <div id="payMsg" class="dim"></div>
                 <button class="ghost" onclick="openWallet()">Cancel</button>`);
         }
         function pickMethod(m) { payMethod = m; $("m_wallet").classList.toggle("on", m === "wallet"); $("m_card").classList.toggle("on", m === "card"); payReady(); }
         function payReady() { $("payBtn").disabled = !($("payOk").checked && payMethod); }
-        async function pay(productId) {
+        async function pay(productId, dollars) {
             $("payBtn").disabled = true;
             try {
-                const r = await wapi("POST", "/api/wallet/purchase", { product: productId, confirmed: true }, payKey);
+                const body = { product: productId, confirmed: true };
+                if (productId === "topup") body.amount_dollars = dollars;
+                const r = await wapi("POST", "/api/wallet/purchase", body, payKey);
                 if (r.status !== "succeeded") { note("payMsg", "Demo payment declined. No points added.", true); $("payBtn").disabled = false; return; }
                 sfx("cashout"); poll(); showReceipt(r);
             } catch (e) { note("payMsg", e.message, true); payReady(); }
@@ -1177,6 +1200,46 @@
                 <div class="kv"><span>Time</span><b>${esc(until(r.created_at))}</b></div>
                 <div class="tiny">Payment id ${esc(r.payment_id)} · provider ${esc(r.provider)}</div>
                 <button class="big go" onclick="openWallet()">BACK TO WALLET</button>`);
+        }
+
+        // profile + signed single-use cashier code
+        const AVATAR_ICON = { ginger: "🟠", black: "⚫", white: "⚪", grey: "🔘", calico: "🟤", tabby: "🟡" };
+        let qrTimer = null;
+        async function openProfile() {
+            let p;
+            try { p = await wapi("GET", "/api/profile") } catch (e) { showPanel(`<div class="warn">${esc(e.message)}</div><button class="ghost" onclick="closePanel()">Close</button>`); return; }
+            const s = p.stats;
+            showPanel(`
+                <div class="row"><h2>🐱 Profile</h2><button class="ghost" style="width:auto" onclick="openWallet()">✕</button></div>
+                <input id="pfName" maxlength="12" value="${esc(p.nickname || "")}" placeholder="Nickname" autocomplete="off">
+                <div class="row" style="gap:6px;flex-wrap:wrap">${p.avatars.map(a => `<button class="opt${a === p.avatar ? " on" : ""}" style="width:auto" data-av="${a}" onclick="pickAvatar('${a}')">${AVATAR_ICON[a] || "🐱"} ${a}</button>`).join("")}</div>
+                <button class="big go" onclick="saveProfile()">SAVE</button>
+                <div id="pfMsg" class="dim"></div>
+                <div class="kv"><span>Rounds played</span><b>${s.rounds}</b></div>
+                <div class="kv"><span>Cash-outs</span><b>${s.wins}</b></div>
+                <div class="kv"><span>Best cash-out</span><b>${s.best_multiplier ? s.best_multiplier.toFixed(2) + "x" : "-"}</b></div>
+                <div class="kv"><span>Net points</span><b>${s.net}</b></div>
+                <b>Cashier code</b>
+                <div class="tiny">Show this at the counter to top up there (simulated). It works once and only for a few minutes.</div>
+                <button class="opt" onclick="showQr()">Show my cashier code</button>
+                <div id="qrBox" style="text-align:center"></div>`);
+            window.pfAvatar = p.avatar;
+        }
+        function pickAvatar(a) { window.pfAvatar = a; document.querySelectorAll("[data-av]").forEach(b => b.classList.toggle("on", b.dataset.av === a)); }
+        async function saveProfile() {
+            try { const r = await wapi("PUT", "/api/profile", { nickname: $("pfName").value, avatar: window.pfAvatar }); note("pfMsg", `Saved as ${r.nickname}`); }
+            catch (e) { note("pfMsg", e.message, true) }
+        }
+        async function showQr() {
+            clearInterval(qrTimer);
+            try {
+                const q = await wapi("POST", "/api/profile/qr", {});
+                const end = Date.now() + q.seconds * 1000;
+                $("qrBox").innerHTML = `<div style="background:#fff;display:inline-block;padding:6px;border-radius:8px">${q.svg}</div>
+                    <div class="kv"><span>Counter code</span><b style="letter-spacing:2px">${esc(q.counter_code)}</b></div><div id="qrLeft" class="tiny"></div>`;
+                const tick = () => { const left = Math.max(0, Math.round((end - Date.now()) / 1000)); if ($("qrLeft")) $("qrLeft").textContent = left ? `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Expired. Ask for a new code."; if (!left || !$("qrLeft")) clearInterval(qrTimer); };
+                tick(); qrTimer = setInterval(tick, 1000);
+            } catch (e) { $("qrBox").innerHTML = `<div class="warn">${esc(e.message)}</div>` }
         }
 
         async function openHistory() {
