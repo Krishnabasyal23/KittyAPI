@@ -1217,10 +1217,23 @@
                 <div class="row"><h2>☰ Menu</h2><button class="ghost" style="width:auto" onclick="closePanel()">✕</button></div>
                 <button class="opt" onclick="openWallet()">👛 Wallet: free points, top-up, ticket</button>
                 <button class="opt" onclick="openProfile()">🐱 Profile &amp; cashier code</button>
-                <button class="opt" onclick="openSafe()">🛟 Safe play: limits, breaks, self-exclusion</button>
+                <button class="opt" onclick="openSafePlay()">🛟 Safe play: limits, breaks, self-exclusion</button>
                 <button class="opt" onclick="openHowTo()">❓ How to play</button>
                 ${WAL && WAL.demo_mode ? '<button class="opt" onclick="openDemoReset()">🔄 New demo player</button>' : ""}
                 <button class="ghost" onclick="closePanel()">Back to the game</button>`);
+        }
+        function openSafePlay() {
+            showPanel(`
+                <div class="row"><h2>🛟 Safe play</h2><button class="ghost" style="width:auto" onclick="openMenu()">✕</button></div>
+                <b>Catino is a game. Points have no cash value and can't be cashed out.</b>
+                <div class="kv"><span>Decide how long you'll play before you start, and stop when the time is up.</span></div>
+                <div class="kv"><span>Each walk is random. The next walk doesn't know about the last one, so chasing losses never helps.</span></div>
+                <div class="kv"><span>On average the game pays back less than you bet. Playing longer doesn't make a win more likely.</span></div>
+                <div class="kv"><span>Take breaks. If playing stops being fun, or you feel you have to play, stop.</span></div>
+                <button class="big go" onclick="openSafe()">LIMITS, REALITY CHECK &amp; BREAKS</button>
+                <div class="dim">Need to talk to someone? ConnexOntario: call <a href="tel:18665312600" style="color:inherit;font-weight:700">1-866-531-2600</a> or text CONNEX to 247247 (free, 24/7, includes gambling support).</div>
+                <div class="dim">In crisis: call or text 9-8-8 (Canada, 24/7). In danger: call 9-1-1.</div>
+                <button class="ghost" onclick="openMenu()">Back</button>`);
         }
         function openHowTo() {
             showPanel(`
@@ -1322,7 +1335,7 @@
                 <label class="check"><input type="checkbox" id="exclOk"> I understand and want to self-exclude.</label>
                 <div class="grid3">${v.options.self_exclusion_days.map(d => `<button onclick="selfExclude(${d})">${d} days</button>`).join("")}</div>
                 <div id="safeMsg" class="dim"></div>
-                <div class="tiny">Need to talk to someone? ConnexOntario: 1-866-531-2600 (free, 24/7).</div>`);
+                <div class="tiny">Need to talk to someone? ConnexOntario: 1-866-531-2600 or text CONNEX to 247247 (free, 24/7). Crisis: call or text 9-8-8.</div>`);
         }
         async function saveLimit(remove) {
             const n = parseInt($("limitIn").value, 10);
