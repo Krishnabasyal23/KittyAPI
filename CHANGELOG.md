@@ -5,6 +5,13 @@ All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangel
 ## [Unreleased]
 
 ### Added
+- Player seeds (Schrödinger's Box). The server still commits to its value first; every rider's device then
+  sends a random seed during the 3 s lead-in and the crash point comes from `value XOR mask(seeds)`, so
+  neither the server nor a player can steer it. `POST /api/rounds/{id}/seed`, `POST /api/crowd/seed`,
+  `GET /api/crowd/box`; the reveal adds `seeds` and `final_value`, and `/verify` a fourth check, `seeds`.
+  Migration 0010 stores both. Phones send their seed on their own, show a "Schrödinger's Box" strip and
+  re-check the opened box in the browser (own SHA-256, plain http has no crypto.subtle).
+- Crowd state adds `commitment`, `seed_count`, `seed_open` and `you.seed_sent`.
 - Test: the phone's season card and cash button, the health check and the rule texts show the
   operator's tuned bonus at once.
 

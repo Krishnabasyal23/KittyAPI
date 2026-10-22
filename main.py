@@ -26,7 +26,7 @@ from database.wallet_store import WalletStore
 from economy import MAX_BET, MIN_BET
 from lottery import lottery_validator
 from payments import CashierProvider, demo_mode, payment_provider
-from fairness import NotRevealedYet
+from fairness import NotRevealedYet, clean_seed
 from errors import WalletError
 from randomness import LIVE_RNG_MODES
 from round_manager import RoundManager
@@ -234,6 +234,28 @@ def cash_out(
         session_id,
         round_id,
     )
+
+
+class SeedRequest(BaseModel):
+    seed: str = Field(max_length=64)
+
+
+@app.post("/api/rounds/{round_id}/seed")
+def send_seed(
+    round_id: str,
+    payload: SeedRequest,
+    session_id: SessionHeader,
+):
+    """The player's seed for Schrodinger's Box: 16-64 hex characters, sent after the commitment was
+    shown and before the lead-in ends (409 when it is too late or already sent)."""
+    try:
+        seed = clean_seed(payload.seed)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        return game_call(manager.submit_seed, session_id, round_id, seed)
+    except HTTPException as exc:
+        raise HTTPException(status_code=409 if exc.status_code == 400 else exc.status_code, detail=exc.detail) from exc
 
 
 @app.get("/api/rounds/{round_id}/result")

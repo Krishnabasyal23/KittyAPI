@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from crash_engine import SEASON_GROWTH, MIN_CRASH_SECONDS, multiplier_at
 from economy import MIN_BET, MAX_BET, calculate_cashout, validate_points
 from errors import WalletError
+from fairness import NotRevealedYet
 from season_rules import describe as describe_season, live as season_live, apply_bonus as season_bonus, bonus_percents, COCOA_LINE
 
 MAX_PLAYERS = 60
@@ -242,6 +243,36 @@ class CrowdTable:
             return {"multiplier": m, "base_multiplier": base, "bonus": bonus,
                     "payout": payout, "balance": p["balance"]}
 
+    # ---------- Schrodinger's Box: player seeds and the opened box ----------
+
+    def seed(self, pid: str, seed: str) -> dict:
+        """A rider's own random seed, sent from the phone after it has seen the box's commitment."""
+        with self.lock:
+            self._tick()
+            p = self._player(pid)
+            if self.phase != "running" or self.round is None or p["bet"] is None:
+                raise HTTPException(status_code=400, detail="Seeds are for riders, while kitty stretches")
+            try:
+                return self.manager.add_seed(self.round, "phone:" + pid, p["name"], seed)
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    def box(self) -> dict:
+        """The opened box of the table's latest walk: the reveal and the server's own checks.
+        Phones check it again themselves (hash, seeds, math) with their own copy of the maths."""
+        with self.lock:
+            self._tick()
+            if self.round is None or not self.host_session:
+                raise HTTPException(status_code=404, detail="No walk yet")
+            if self.phase != "crashed":
+                raise HTTPException(status_code=409, detail="The box opens when the cat gets distracted")
+            try:
+                return self.manager.verify_round(self.host_session, self.round["round_id"])
+            except NotRevealedYet as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
+
     # ---------- the big-screen player ----------
 
     def _peek_forecast(self):
@@ -270,6 +301,7 @@ class CrowdTable:
 
     def _tick(self):
         if self.phase == "running" and self.round is not None:
+            self.manager.finalize_round(self.round)   # lead-in over: the players' seeds make the crash point
             elapsed = self.clock() - self.round["start_time"]
             if elapsed >= self.round["crash_time"]:
                 self.phase = "crashed"
@@ -322,6 +354,10 @@ class CrowdTable:
                 data["season"] = self.round.get("season") or ""
                 data["rush"] = bool(self.round.get("rush"))
                 data["rules"] = describe_season(data["season"], lang)
+                proof = self.round.get("proof") or {}
+                data["commitment"] = proof.get("commitment") or ""
+                data["seed_count"] = len(self.round.get("seed_keys") or ())
+                data["seed_open"] = self.phase == "running" and not self.round.get("seeds_closed") and elapsed < data["warmup"]
                 if self.phase == "running":
                     data.update(season_live(self.round.get("events"), elapsed))
                     data["multiplier"] = _round_multiplier(self.round, elapsed)
@@ -367,6 +403,7 @@ class CrowdTable:
                         "bet": _money(p["bet"]), "cashed_at": p["cashed_at"] or 0.0,
                         "payout": _money(p["payout"]),
                         "bonus": p.get("bonus") or "",
+                        "seed_sent": ("phone:" + pid) in ((self.round or {}).get("seed_keys") or ()),
                     }
                 else:
                     data["you"] = None
@@ -408,6 +445,11 @@ class PlayerBody(BaseModel):
     player_id: str
 
 
+class SeedBody(BaseModel):
+    player_id: str
+    seed: str = Field(max_length=64)
+
+
 def make_router(table: CrowdTable) -> APIRouter:
     r = APIRouter()
 
@@ -441,6 +483,14 @@ def make_router(table: CrowdTable) -> APIRouter:
     @r.post("/api/crowd/cashout")
     def cash_out(body: PlayerBody):
         return table.cash_out(body.player_id)
+
+    @r.post("/api/crowd/seed")
+    def seed(body: SeedBody):
+        return table.seed(body.player_id, body.seed)
+
+    @r.get("/api/crowd/box")
+    def box():
+        return table.box()
 
     @r.get("/api/crowd/state")
     def state(player_id: str = "", lang: str = "en"):

@@ -23,7 +23,17 @@ from economy import (
     credit_winnings,
 )
 
-from fairness import NotRevealedYet, make_proof, proof_from_columns, public_reveal, verify as verify_proof
+from fairness import (
+    MAX_SEEDS,
+    NotRevealedYet,
+    apply_seeds,
+    clean_seed,
+    crash_from_value,
+    make_proof,
+    proof_from_columns,
+    public_reveal,
+    verify as verify_proof,
+)
 from randomness import LIVE_RNG_MODES
 from season_rules import (
     plan as plan_season_events,
@@ -160,6 +170,7 @@ class RoundManager:
                     ),
                     "payout": saved["payout_points"],
                     "proof": proof_from_columns(saved),
+                    "seeds_closed": True,
                 }
 
                 self.rounds[round_id] = round_data
@@ -182,6 +193,8 @@ class RoundManager:
         if round_data["status"] != "running":
             return
 
+        self.finalize_round(round_data, now)
+
         elapsed = now - round_data["start_time"]
 
         if elapsed >= round_data["crash_time"]:
@@ -203,6 +216,67 @@ class RoundManager:
                 == round_data["round_id"]
             ):
                 session["active_round_id"] = None
+
+    # PLAYER SEEDS (Schrodinger's Box)
+
+    def finalize_round(self, round_data: dict, now: float | None = None) -> None:
+        """When the lead-in is over, close the seed window and make the crash point from
+        value XOR mask(seeds). Idempotent. Until then the crash point is only provisional: no
+        crash can happen during the lead-in, and nothing reveals it."""
+        with self._lock:
+            if round_data.get("seeds_closed") or round_data["status"] != "running":
+                return
+            now = self._clock() if now is None else now
+            if now - round_data["start_time"] < round_data["lead_in_seconds"]:
+                return
+            round_data["seeds_closed"] = True
+            proof = round_data.get("proof")
+            if not proof or proof.get("scheme") != "value":
+                return
+            seeds = round_data.get("seeds") or []
+            final = apply_seeds(proof, round_data["round_id"], seeds)
+            if seeds:
+                crash_point = crash_from_value(final, int(proof["bits"]), proof["house_edge"], proof["max_multiplier"])
+                round_data["crash_point"] = crash_point
+                round_data["crash_time"] = crash_after_seconds(
+                    crash_point,
+                    growth_rate=round_data["growth_rate"],
+                    lead_in_seconds=round_data["lead_in_seconds"],
+                )
+            if self._session_store is not None:
+                self._session_store.record_round_seeds(
+                    round_data["round_id"], round_data["crash_point"], round_data["crash_time"],
+                    proof["seeds"], final,
+                )
+
+    def add_seed(self, round_data: dict, key: str, label: str, seed: str) -> dict:
+        """One seed per `key` (a seat) while the lead-in runs. The seed is kept secret until the reveal."""
+        with self._lock:
+            now = self._clock()
+            if (
+                round_data["status"] != "running"
+                or round_data.get("seeds_closed")
+                or now - round_data["start_time"] >= round_data["lead_in_seconds"]
+            ):
+                raise ValueError("Seeds close when the walk starts")
+            proof = round_data.get("proof")
+            if not proof or proof.get("scheme") != "value":
+                raise ValueError("This round does not take seeds")
+            seed = clean_seed(seed)
+            keys = round_data.setdefault("seed_keys", set())
+            if key in keys:
+                raise ValueError("You already sent a seed for this round")
+            if len(keys) >= MAX_SEEDS:
+                raise ValueError("The box has all the seeds it takes")
+            round_data.setdefault("seeds", []).append({"label": (label or "player")[:12], "seed": seed})
+            keys.add(key)
+            return {"accepted": True, "count": len(keys), "commitment": proof["commitment"]}
+
+    def submit_seed(self, session_id: str, round_id: str, seed: str, label: str = "player") -> dict:
+        """The player's own seed for their round (sent after they have seen the commitment)."""
+        with self._lock:
+            round_data = self._owned_round(session_id, round_id)
+            return self.add_seed(round_data, "owner", label, seed)
 
     # WAGER VALIDATION
 
@@ -306,6 +380,9 @@ class RoundManager:
                 "lead_in_seconds": MIN_CRASH_SECONDS,
                 "events": events,
                 "proof": proof,
+                "seeds": [],
+                "seed_keys": set(),
+                "seeds_closed": False,
             }
 
             self.rounds[round_id] = round_data

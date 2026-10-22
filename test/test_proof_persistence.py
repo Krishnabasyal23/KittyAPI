@@ -44,7 +44,7 @@ def test_verify_works_after_a_restart(monkeypatch, store):
     body = restarted.verify_round(sid, rid)     # refunded rounds open at once
     assert body["commitment"] == started["commitment"]
     assert body["crash_point"] == sealed_crash
-    assert body["checks"] == {"hash": True, "math": True, "quantum": None}
+    assert body["checks"] == {"hash": True, "math": True, "quantum": None, "seeds": None}
     assert body["verified"] is True
 
 

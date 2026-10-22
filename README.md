@@ -50,7 +50,8 @@ Player endpoints take the wallet id in the `X-Session-ID` header: the PC session
 | GET | `/api/rounds/{id}/state` | Live multiplier, phase, season events |
 | POST | `/api/rounds/{id}/cashout` | Cash out at the current multiplier (+ season bonus) |
 | GET | `/api/rounds/{id}/result` | Crash point, distraction and fairness proof once the cat is distracted |
-| GET | `/api/rounds/{id}/verify` | "Verify this round": revealed proof plus hash / math / qubit checks (409 until the crash) |
+| POST | `/api/rounds/{id}/seed` | Your seed for Schrödinger's Box: `{"seed": 16-64 hex characters}`, sent after the commitment is shown and before the lead-in ends (409 when late or already sent) |
+| GET | `/api/rounds/{id}/verify` | "Verify this round": revealed proof plus hash / math / qubit / seeds checks (409 until the crash) |
 | GET | `/api/rounds/{id}/season` | Season and event schedule for the game screen |
 | GET / POST | `/api/season/next` | Forecast (next walk's season and rule, plus `upcoming`: the next three) / choose the next walk's season (host key N) |
 | GET | `/api/player/balance` | Current points |
@@ -79,6 +80,7 @@ Player endpoints take the wallet id in the `X-Session-ID` header: the PC session
 | GET | `/api/leaderboard` | Top balances |
 | GET | `/crowd` | Phone page (crowd mode, up to 60 phones) |
 | POST | `/api/crowd/host`, `/api/crowd/open` | Big screen: become host, open betting |
+| POST / GET | `/api/crowd/seed`, `/api/crowd/box` | A rider's seed (`{"player_id", "seed"}`, only while kitty stretches) / the opened box of the latest walk (409 until the crash); phones re-check it themselves |
 | POST | `/api/crowd/join`, `/api/crowd/bet`, `/api/crowd/cashout` | Phone actions (join takes `player_id` to rejoin and `age_confirmed` from the 19+ box) |
 | GET | `/api/crowd/state` | Shared table state (`?player_id=&lang=fr`); the game screen polls it |
 | WS | `/ws/crowd?player_id=&lang=` | The same state pushed to phones (up to 5 a second, only when it changed). Phones fall back to polling if it drops |
@@ -133,24 +135,36 @@ Interactive docs: `http://127.0.0.1:8001/docs`.
 - **Crowd mode:** phones play from persistent `phone` wallets. A phone that saved its `player_id`
   rejoins the same wallet after a restart, and bets still open or riding at a restart are refunded.
 
-## Provably fair seal
+## Provably fair seal (Schrödinger's Box)
 
-`fairness.py` seals every round before anyone can cash out:
+The box is sealed until the cat is "observed" at the crash. `fairness.py` seals every round before anyone
+can cash out:
 
 1. **Round start** (`POST /api/rounds`) returns only `commitment = sha256("{round_id}:{value}:{salt}")`.
    `value` is the random integer the crash point comes from; `salt` is secret.
 2. **After the crash** (not after your cash-out: the cat keeps walking for everyone else),
    `/result` and `/verify` reveal `value`, `salt`, `bits`, the qubit samples and the classical mask.
-3. **Anyone can check:**
+3. **Player seeds.** While kitty stretches (the 3 s lead-in) every rider's device sends a random seed,
+   made after it saw the commitment. The crash point comes from
+   `final_value = value XOR mask(seeds)`, where `mask` is the top `bits` bits of
+   `sha256("{round_id}:seeds:{seed1},{seed2},...")`. The server committed to `value` before any seed
+   existed, and nobody sends a seed knowing `value`, so neither side can steer the result: it is uniform if
+   either side is honest (same idea as the quantum XOR mask). The crash point is provisional until the
+   lead-in ends and nothing can crash before then. With no seeds, `final_value == value`.
+4. **Anyone can check:**
    - the hash matches the published commitment;
-   - `crash = clamp(0.96 / ((value + 0.5) / 2^bits), 1, 100)`;
+   - `final_value == value XOR mask(seeds)` for the published seeds (the phones also check their own seed is in);
+   - `crash = clamp(0.96 / ((final_value + 0.5) / 2^bits), 1, 100)`;
    - in hybrid mode, `value == concat(quantum_samples) XOR classical_mask`.
+
+Limits: the server could still leave a seed out of the list (a phone notices when its own is missing) or
+cancel a round it dislikes (open bets are refunded). A seed sent after the lead-in is refused.
 
 Seasons never touch the sealed value: Summer Zoomies and season events use separate draws, and
 bonuses only raise the cash-out multiplier. The JSON matches `QuantumProof` in the Unity client
 (`Fairness.cs`), which runs the same checks in the quantum box (key Q).
 
-Seals are stored with each round (migration 0003), so `/verify` works after a restart. A reloaded
+Seals and seeds are stored with each round (migrations 0003 and 0010), so `/verify` works after a restart. A reloaded
 round stays sealed until its crash time on the wall clock. A refunded (interrupted) round opens at once.
 
 ## Tests and tools
