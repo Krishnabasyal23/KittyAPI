@@ -426,6 +426,30 @@ class WalletStore:
             _, balance = self._post(conn, session_id, "wager", -wager, round_id=round_id)
             return balance
 
+    def record_round_seeds(
+        self,
+        round_id: str,
+        crash_point: float,
+        crash_time: float,
+        seeds: list | None,
+        final_value: int | None,
+    ) -> None:
+        """Lead-in over: store the players' seeds and the final crash point/time made from them.
+        Only a still-running round changes, and only these four fields."""
+        if not isfinite(crash_point) or crash_point < 1.0:
+            raise ValueError("Invalid crash point")
+        if not isfinite(crash_time) or crash_time < 0:
+            raise ValueError("Invalid crash time")
+        with self._write() as conn:
+            conn.execute(
+                """
+                UPDATE rounds SET crash_point = ?, crash_time_seconds = ?, proof_seeds = ?, proof_final_value = ?
+                WHERE round_id = ? AND status = 'running'
+                """,
+                (crash_point, crash_time, None if seeds is None else json.dumps(seeds),
+                 None if final_value is None else str(final_value), round_id),
+            )
+
     def settle_round(
         self,
         session_id: str,

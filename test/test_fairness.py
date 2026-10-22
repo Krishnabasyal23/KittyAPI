@@ -46,7 +46,7 @@ def test_quantum_samples_are_published(monkeypatch):
     assert reveal["quantum_samples"] == [5, 17, 63, 0, 42, 9]
     assert isinstance(reveal["value"], str) and isinstance(reveal["classical_mask"], str)
     checks = verify(rid, reveal, result["crash_point"], started["commitment"])
-    assert checks == {"hash": True, "math": True, "quantum": True}
+    assert checks == {"hash": True, "math": True, "quantum": True, "seeds": None}
 
 
 def test_reveal_matches_unity_quantum_proof_fields():
@@ -55,7 +55,7 @@ def test_reveal_matches_unity_quantum_proof_fields():
     # QuantumProof in Assets/KittyCrash/Scripts/Core/Fairness.cs
     assert set(reveal) == {
         "scheme", "commitment", "salt", "value", "bits", "qubits", "source", "quantum_samples",
-        "classical_mask", "house_edge", "max_multiplier", "crash_point_exact",
+        "classical_mask", "house_edge", "max_multiplier", "crash_point_exact", "seeds", "final_value",
     }
     assert reveal["scheme"] == "value" and reveal["bits"] == 36 and reveal["qubits"] == 6
 

@@ -322,6 +322,22 @@
             color: var(--red)
         }
 
+        .boxline {
+            width: 100%;
+            margin-top: 10px;
+            padding: 8px 10px;
+            font-size: 14px;
+            text-align: left;
+            background: #231f38;
+            color: var(--text);
+            border: 2px solid var(--line);
+            border-radius: 12px
+        }
+
+        .boxline.open {
+            border-color: var(--orange)
+        }
+
         .hidden {
             display: none !important
         }
@@ -614,6 +630,7 @@
                 <div><b id="moodLabel">Chillin'</b><span id="moodSub"></span></div>
             </div>
             <div class="hist" id="hist" style="margin-top:10px"></div>
+            <button class="boxline hidden" id="boxBtn" onclick="openBox()"></button>
         </div>
 
         <div id="betBox" class="card" style="display:flex;flex-direction:column;gap:10px">
@@ -688,6 +705,13 @@
                 "s.crisis": "In crisis: call or text 9-8-8 (Canada, 24/7). In danger: call 9-1-1.", "back": "Back",
                 "r.title": "🔄 New demo player", "r.ask": "Start over with a fresh wallet and the starting points. Your old wallet stays on the server.",
                 "r.yes": "START OVER", "cancel": "Cancel", "then": "Then: ",
+                "box.title": "Schrödinger's Box", "box.sealed": "📦 Schrödinger's Box · sealed {0}", "box.seedIn": " · your seed is in ✓",
+                "box.open": "📦 Open Schrödinger's Box",
+                "box.intro": "Before the walk the server sealed its secret. Every rider's phone then added a random seed, so nobody, not even the server, could pick the outcome. This phone just re-checked all of it.",
+                "box.hash": "Sealed before the walk (hash matches)", "box.seeds": "Seeds mixed in: {0}", "box.mine": "Your seed is counted",
+                "box.mineNo": "Your seed wasn't counted (sent too late)", "box.math": "Crash point follows from the sealed value",
+                "box.qubits": "Qubit samples + mask make the value", "box.noSeeds": "No seeds were sent this walk", "box.crash": "Kitty stopped at {0}x",
+                "box.local": "Checked on this phone with its own copy of the maths.", "box.wait": "The box opens when the cat gets distracted.",
             },
             fr: {
                 "join.intro": "Misez sur le chat avec toute la salle. Encaissez avant qu'il soit distrait!",
@@ -719,6 +743,13 @@
                 "s.crisis": "En crise : appelez ou textez le 9-8-8 (Canada, 24/7). En danger : composez le 9-1-1.", "back": "Retour",
                 "r.title": "🔄 Nouveau joueur (démo)", "r.ask": "Recommencez avec un nouveau portefeuille et les points de départ. L'ancien reste sur le serveur.",
                 "r.yes": "RECOMMENCER", "cancel": "Annuler", "then": "Ensuite : ",
+                "box.title": "Boîte de Schrödinger", "box.sealed": "📦 Boîte de Schrödinger · scellée {0}", "box.seedIn": " · votre graine est dedans ✓",
+                "box.open": "📦 Ouvrir la boîte de Schrödinger",
+                "box.intro": "Avant la promenade, le serveur a scellé son secret. Le téléphone de chaque joueur a ensuite ajouté une graine au hasard : personne, pas même le serveur, ne pouvait choisir le résultat. Ce téléphone vient de tout revérifier.",
+                "box.hash": "Scellée avant la promenade (le hachage correspond)", "box.seeds": "Graines mélangées : {0}", "box.mine": "Votre graine est comptée",
+                "box.mineNo": "Votre graine n'a pas été comptée (envoyée trop tard)", "box.math": "Le point de chute découle de la valeur scellée",
+                "box.qubits": "Les qubits et le masque donnent la valeur", "box.noSeeds": "Aucune graine envoyée cette promenade", "box.crash": "Le chat s'est arrêté à {0}x",
+                "box.local": "Vérifié sur ce téléphone avec sa propre copie des calculs.", "box.wait": "La boîte s'ouvre quand le chat est distrait.",
             },
         };
         let LANG = localStorage.getItem("kc_lang") === "fr" ? "fr" : "en";
@@ -883,6 +914,7 @@
             stage.classList.toggle("won", cashed);
 
             soundEvents(s, hasBet, cashed);
+            boxUpdate(you, hasBet);
 
             // phase changes
             if (s.phase !== lastPhase) {
@@ -924,6 +956,96 @@
                 : `<div class="dim">No bets yet</div>`;
             $("board").innerHTML = s.leaderboard.map((p, i) =>
                 `<div class="item ${p.name === you.name ? "me" : ""}"><span>${["🥇", "🥈", "🥉", "4.", "5."][i]} ${p.host ? "🖥 " : ""}${esc(p.name)}</span><span>🪙 ${Math.floor(p.balance)}</span></div>`).join("");
+        }
+
+        // ───────── Schrödinger's Box: this phone adds a random seed to the walk and re-checks the opened box ─────────
+        // The server commits to its secret value first. While kitty stretches, every rider's phone sends a random seed
+        // (made here, after the commitment was shown). The crash point comes from value XOR mask(seeds).
+        const mySeeds = {}, seedTried = {}, seenSeal = {};
+        let seedBusy = false;
+        function randomSeed() {
+            const a = new Uint8Array(16); crypto.getRandomValues(a);
+            return Array.from(a, b => b.toString(16).padStart(2, "0")).join("");
+        }
+        async function boxUpdate(you, hasBet) {
+            const b = $("boxBtn"), on = (s.phase === "running" || s.phase === "crashed") && !!s.commitment;
+            b.classList.toggle("hidden", !on);
+            if (!on) return;
+            if (!seenSeal[s.round_no]) seenSeal[s.round_no] = s.commitment;
+            b.classList.toggle("open", s.phase === "crashed");
+            b.textContent = s.phase === "crashed" ? tr("box.open")
+                : tr("box.sealed", s.commitment.slice(0, 6)) + (mySeeds[s.round_no] ? tr("box.seedIn") : "");
+            if (s.phase === "running" && hasBet && s.seed_open && !you.seed_sent && !seedBusy && !seedTried[s.round_no]) {
+                seedBusy = true; seedTried[s.round_no] = true;
+                const round = s.round_no, seed = randomSeed();
+                try { await api("/api/crowd/seed", { player_id: pid, seed }); mySeeds[round] = seed; } catch (e) { /* too late: the box just doesn't count this phone */ }
+                seedBusy = false;
+            }
+        }
+
+        const SHA_K = new Uint32Array([0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+            0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+            0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+            0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+            0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]);
+        // SHA-256 here because crypto.subtle only exists on https pages and the phones use plain http on the Wi-Fi
+        function sha256hex(text) {
+            const m = new TextEncoder().encode(text), l = m.length, n = ((l + 9 + 63) >> 6) << 6, d = new Uint8Array(n);
+            d.set(m); d[l] = 0x80;
+            const dv = new DataView(d.buffer); dv.setUint32(n - 8, Math.floor(l * 8 / 4294967296)); dv.setUint32(n - 4, (l * 8) >>> 0);
+            let h = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+            const w = new Uint32Array(64), r = (x, k) => (x >>> k) | (x << (32 - k));
+            for (let o = 0; o < n; o += 64) {
+                for (let i = 0; i < 16; i++) w[i] = dv.getUint32(o + i * 4);
+                for (let i = 16; i < 64; i++) { const a = w[i - 15], b = w[i - 2]; w[i] = (w[i - 16] + (r(a, 7) ^ r(a, 18) ^ (a >>> 3)) + w[i - 7] + (r(b, 17) ^ r(b, 19) ^ (b >>> 10))) >>> 0; }
+                let [a, b, c, dd, e, f, g, hh] = h;
+                for (let i = 0; i < 64; i++) {
+                    const t1 = (hh + (r(e, 6) ^ r(e, 11) ^ r(e, 25)) + ((e & f) ^ (~e & g)) + SHA_K[i] + w[i]) >>> 0;
+                    const t2 = ((r(a, 2) ^ r(a, 13) ^ r(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
+                    hh = g; g = f; f = e; e = (dd + t1) >>> 0; dd = c; c = b; b = a; a = (t1 + t2) >>> 0;
+                }
+                h = [a, b, c, dd, e, f, g, hh].map((v, i) => (h[i] + v) >>> 0);
+            }
+            return h.map(v => v.toString(16).padStart(8, "0")).join("");
+        }
+        // the same checks as the server's fairness.verify(), run on this phone
+        function checkBox(box, sealSeen, mine) {
+            const p = box.proof, rid = box.round_id, bits = p.bits, out = {};
+            out.hash = sha256hex(rid + ":" + p.value + ":" + p.salt) === p.commitment && (!sealSeen || sealSeen === p.commitment);
+            const seeds = (p.seeds || []).map(x => x.seed), v = BigInt(p.value), hex = Math.ceil(bits / 4);
+            const mask = seeds.length ? BigInt("0x" + sha256hex(rid + ":seeds:" + seeds.join(",")).slice(0, hex)) >> BigInt(hex * 4 - bits) : 0n;
+            const final = p.final_value != null ? BigInt(p.final_value) : v;
+            out.seedCount = seeds.length;
+            out.seeds = seeds.length ? final === (v ^ mask) : null;
+            out.mine = mine ? seeds.includes(mine) : null;
+            const u = (Number(final) + 0.5) / Math.pow(2, bits), c = Math.max(1, Math.min((1 - p.house_edge) / u, p.max_multiplier));
+            out.math = Math.abs(c - box.crash_point) < 1e-6 * Math.max(1, c);
+            out.quantum = null;
+            if (p.quantum_samples && p.quantum_samples.length) {
+                let comb = 0n; for (const q of p.quantum_samples) comb = (comb << BigInt(p.qubits)) | BigInt(q);
+                out.quantum = (comb ^ BigInt(p.classical_mask || 0)) === v;
+            }
+            return out;
+        }
+        async function openBox() {
+            const round = s ? s.round_no : -1, seal = seenSeal[round], mine = mySeeds[round];
+            showPanel('<div class="row"><h2>📦 ' + tr("box.title") + '</h2><button class="ghost" style="width:auto" onclick="closePanel()">✕</button></div><div class="dim" id="boxBody">…</div>');
+            try {
+                const box = await api("/api/crowd/box"), c = checkBox(box, seal, mine);
+                const row = (ok, text) => '<div class="kv"><span>' + text + '</span><b style="color:var(--' + (ok ? "green" : "red") + ')">' + (ok ? "✓" : "✗") + '</b></div>';
+                $("boxBody").innerHTML = '<div>' + tr("box.intro") + '</div>'
+                    + '<div style="font-size:22px;margin:10px 0">' + tr("box.crash", box.crash_point.toFixed(2)) + '</div>'
+                    + row(c.hash, tr("box.hash"))
+                    + (c.seeds === null ? '<div class="kv"><span>' + tr("box.noSeeds") + '</span><b>–</b></div>' : row(c.seeds, tr("box.seeds", c.seedCount)))
+                    + (c.mine === null ? "" : row(c.mine, c.mine ? tr("box.mine") : tr("box.mineNo")))
+                    + row(c.math, tr("box.math"))
+                    + (c.quantum === null ? "" : row(c.quantum, tr("box.qubits")))
+                    + '<div class="tiny" style="margin-top:8px">' + tr("box.local") + '</div>'
+                    + '<div class="tiny">' + esc(box.commitment) + '</div>'
+                    + '<button class="big go" onclick="closePanel()">OK</button>';
+            } catch (e) { $("boxBody").textContent = e.message || tr("box.wait"); }
+            localize($("sheetBody"));
         }
 
         // time since the walk started, smoothed between polls

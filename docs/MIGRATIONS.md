@@ -35,6 +35,7 @@ that has the v1 schema.
 | 7 | `0007_profiles_qr_cashier.sql` | profiles, single-use cashier QR codes; payments rebuilt for any-amount top-ups (rows copied) |
 | 8 | `0008_ticket_entry_lock.sql` | ticket entry lock (wrong-code count, locked until) |
 | 9 | `0009_audit_log_settings.sql` | append-only audit log; operator settings (tuned season bonuses) |
+| 10 | `0010_player_seeds.sql` | player seeds and the final value of each round (Schrodinger's Box) |
 
 ## Rollback procedures
 

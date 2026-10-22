@@ -5,7 +5,8 @@ Run from KittyAPI (inside the hackathon conda env), with Google Chrome installed
 
 Starts uvicorn on port 8001 with a throwaway database and DEMO_MODE=1 (never port 8000, never the
 v1 database), drives the page through the Chrome DevTools protocol (join with the 19+ box, wallet,
-daily points, demo checkout, ticket entry, profile and cashier code, history, play-safe tools, out-of-points, reality check)
+daily points, demo checkout, ticket entry, profile and cashier code, history, play-safe tools, out-of-points, reality check,
+then one walk with Schrodinger's Box: the phone's seed and its own check of the opened box)
 and prints PASS/FAIL per step. Chrome's profile, cache and the screenshots go under
 <project>/.tmp/phone_ui (KITTY_TEST_TMP overrides). Set CHROME_PATH if Chrome is elsewhere.
 """
@@ -295,6 +296,55 @@ async def main():
             await asyncio.sleep(1)
             msg = await js("document.getElementById('lookupMsg').textContent")
             check("cashier code works once", "already used" in msg, msg)
+
+            # Schrodinger's Box: a new rider's phone sends its own seed while kitty stretches, then re-checks the opened box
+            base = "http://127.0.0.1:8001"
+            await cdp("Emulation.setDeviceMetricsOverride", width=400, height=860, deviceScaleFactor=1, mobile=True)
+            await cdp("Page.navigate", url=base + "/crowd")
+            await asyncio.sleep(2)
+            await js("localStorage.clear(); localStorage.setItem('kc_tour', '1')")
+            await cdp("Page.reload")
+            await asyncio.sleep(2)
+            await js("document.getElementById('name').value='Boxer'; const a=document.getElementById('ageOk'); a.checked=true; a.onchange(); document.getElementById('joinBtn').click()")
+            await asyncio.sleep(2)
+            await js("closePanel()")
+            host = httpx.post(base + "/api/sessions").json()["session_id"]
+            hh = {"X-Session-ID": host}
+            httpx.post(base + "/api/wallet/age-confirm", headers=hh, json={"confirm": True})
+            httpx.post(base + "/api/crowd/host", headers=hh, json={"name": "Screen"})
+            httpx.post(base + "/api/crowd/open", headers=hh, json={"seconds": 8})
+            await asyncio.sleep(1)
+            await js("api('/api/crowd/bet', {player_id: pid, wager: '5'})")
+            started = httpx.post(base + "/api/rounds", headers=hh, json={"wager": "1"}).json()
+            rid = started["round_id"]
+            seal = started["commitment"][:6]
+            check("the game screen's own seed is accepted",
+                  httpx.post(f"{base}/api/rounds/{rid}/seed", headers=hh, json={"seed": "ab" * 16}).status_code == 200)
+            await asyncio.sleep(1.8)
+            strip = await js("document.getElementById('boxBtn').innerText")
+            check("box strip shows the seal and the phone's seed", seal in strip and "✓" in strip, strip)
+            await shot("10_box_sealed")
+            state = httpx.get(base + "/api/crowd/state").json()
+            check("two seeds are in (screen + phone)", state["seed_count"] == 2, str(state.get("seed_count")))
+            late = httpx.post(f"{base}/api/rounds/{rid}/seed", headers=hh, json={"seed": "cd" * 16})
+            check("a second seed from the same seat is refused", late.status_code == 409, str(late.status_code))
+            for _ in range(70):                              # the walk lasts at most about 40 s
+                if httpx.get(base + "/api/crowd/state").json()["phase"] == "crashed":
+                    break
+                await asyncio.sleep(1)
+            await asyncio.sleep(1.2)
+            check("strip offers to open the box", "Open" in await js("document.getElementById('boxBtn').innerText"))
+            await js("openBox()")
+            await asyncio.sleep(1.5)
+            text = await sheet_text()
+            check("phone re-checks the box: hash, seeds, math all pass",
+                  "Sealed before the walk" in text and "Seeds mixed in: 2" in text and "Your seed is counted" in text
+                  and "Crash point follows" in text and "✗" not in text, text[:200])
+            await shot("10_box_open")
+            await js("closePanel(); toggleLang()")
+            await js("openBox()")
+            await asyncio.sleep(1.5)
+            check("box panel follows the French setting", "Boîte de Schrödinger" in await sheet_text())
     finally:
         if chrome:
             chrome.terminate()
