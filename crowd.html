@@ -766,7 +766,7 @@
             for (let n = walk.nextNode(); n; n = walk.nextNode()) n.nodeValue = fx(n.nodeValue);
             root.querySelectorAll("[placeholder]").forEach(e => e.placeholder = fx(e.placeholder));
         }
-        function toggleLang() { LANG = LANG === "en" ? "fr" : "en"; localStorage.setItem("kc_lang", LANG); applyLang(); }
+        function toggleLang() { LANG = LANG === "en" ? "fr" : "en"; localStorage.setItem("kc_lang", LANG); applyLang(); if (typeof reconnectLive === "function" && live) reconnectLive(); }
         applyLang();
 
         function esc(t) { return String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])) }
@@ -787,7 +787,7 @@
                 if (!$("ageOk").checked) { $("joinErr").textContent = "You must be 19 or older to play."; return; }
                 localStorage.setItem("kc_age", "1");
                 const j = await api("/api/crowd/join", { name: $("name").value, player_id: localStorage.getItem("kc_pid") || null, age_confirmed: true });
-                pid = j.player_id; localStorage.setItem("kc_pid", pid); localStorage.setItem("kc_name", j.name);
+                pid = j.player_id; localStorage.setItem("kc_pid", pid); localStorage.setItem("kc_name", j.name); reconnectLive();
                 show();
             } catch (e) { $("joinErr").textContent = e.message }
         };
@@ -821,9 +821,29 @@
         async function rejoin() {
             try {
                 const j = await api("/api/crowd/join", { name: localStorage.getItem("kc_name") || "", player_id: pid, age_confirmed: localStorage.getItem("kc_age") === "1" });
-                pid = j.player_id; localStorage.setItem("kc_pid", pid);
+                pid = j.player_id; localStorage.setItem("kc_pid", pid); reconnectLive();
             } catch (e) { pid = ""; localStorage.removeItem("kc_pid"); show(); }
         }
+
+        // live state: a WebSocket push (about 5 a second); polling every 0.3 s only while the socket is down
+        let live = null, liveOk = false, pollTimer = null;
+        function startPolling() { if (!pollTimer) pollTimer = setInterval(poll, 300); }
+        function stopPolling() { clearInterval(pollTimer); pollTimer = null; }
+        function connectLive() {
+            if (!("WebSocket" in window)) { startPolling(); return; }
+            const url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/crowd?player_id=" + encodeURIComponent(pid) + "&lang=" + LANG;
+            const sock = new WebSocket(url);
+            live = sock;
+            sock.onopen = () => { if (live === sock) { liveOk = true; stopPolling(); } };
+            sock.onmessage = async ev => {
+                if (live !== sock) return;
+                const j = JSON.parse(ev.data);
+                if (pid && j.you === null) { await rejoin(); return; }   // server restarted: same wallet, same points
+                s = j; recvAt = performance.now(); render();
+            };
+            sock.onclose = () => { if (live !== sock) return; liveOk = false; startPolling(); setTimeout(() => { if (live === sock) connectLive(); }, 3000); };
+        }
+        function reconnectLive() { const old = live; live = null; if (old) old.close(); connectLive(); }
 
         async function poll() {
             try {
@@ -1214,7 +1234,7 @@
 
         (function sceneLoop(now) { drawScene(now); requestAnimationFrame(sceneLoop); })(performance.now());
 
-        show(); poll(); setInterval(poll, 300); requestAnimationFrame(frame);
+        show(); poll(); startPolling(); connectLive(); requestAnimationFrame(frame);
     </script>
     <script>
         // ---------- wallet, demo checkout, ticket bonus, profile, play-safe tools ----------

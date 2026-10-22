@@ -5,6 +5,8 @@ All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangel
 ## [Unreleased]
 
 ### Added
+- Phones get the crowd state over a WebSocket (`/ws/crowd`) instead of polling every 0.3 s; they go
+  back to polling while the socket is down and reconnect every 3 s.
 - Append-only audit log (migration 0009): cashier top-ups and codes, play-safe changes, ticket
   locks, operator changes. Shown on the dashboard, `/api/operator/audit`, `audit.csv`.
 - Season bonus tuning on the dashboard (`/api/operator/bonus`): 0-4% each, the cap derived from
