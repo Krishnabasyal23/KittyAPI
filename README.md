@@ -33,6 +33,7 @@ code never opens.
 | `GAME_RNG_MODE` | `hybrid` | `hybrid` (simulated quantum XOR `secrets`) or `secure` (`secrets` only). Any other value, including the seeded `classical` mode, stops the server at start-up. |
 | `CORS_ORIGINS` | localhost dev ports | Comma-separated browser origins allowed to call the API. |
 | `PUBLIC_URL` | LAN IP + port | Base URL put in the crowd-mode join QR (e.g. when behind a tunnel). |
+| `QR_SECRET` | random per start | Key that signs the cashier QR codes. Unset: a new random key at each start, so open codes die on restart (they only last 5 minutes anyway). |
 | `KITTY_TEST_TMP` | `<project>/.tmp` | Where tests and scripts put their throwaway databases and logs. |
 
 ## Endpoints
@@ -58,7 +59,7 @@ Player endpoints take the wallet id in the `X-Session-ID` header: the PC session
 | GET | `/api/wallet/ledger` | Append-only ledger entries with `balance_after` |
 | GET | `/api/wallet/receipts` | Simulated payment receipts |
 | POST | `/api/wallet/daily-free` | +20 points, once per server calendar day (409 after) |
-| POST | `/api/wallet/purchase` | `{"product": "topup_5" \| "parking_5", "confirmed": true}`, **Idempotency-Key required**, `DEMO_MODE=1` only. `confirmed` is the "simulated payment" checkbox. 402 with the receipt if declined |
+| POST | `/api/wallet/purchase` | `{"product": "topup", "amount_dollars": 1-100, "confirmed": true}` or `{"product": "parking_5", ...}`, **Idempotency-Key required**, `DEMO_MODE=1` only. `confirmed` is the "simulated payment" checkbox. 402 with the receipt if declined |
 | POST | `/api/wallet/lottery/redeem` | `{"ticket_id", "numbers": "01 02 04 08 16"}`: +25 points, `DEMO_MODE=1` only |
 | POST | `/api/demo/lottery/tickets` | Issue a mock ticket (optional `{"numbers": ...}`), `DEMO_MODE=1` only |
 | POST | `/api/wallet/age-confirm` | `{"confirm": true}`: self-attested 19+ (no ID check). Required before any wager or purchase |
@@ -66,13 +67,17 @@ Player endpoints take the wallet id in the `X-Session-ID` header: the PC session
 | POST | `/api/wallet/cool-off` | `{"hours": 1 \| 24 \| 168, "confirm": true}`: pause wagers and purchases; extend only |
 | POST | `/api/wallet/self-exclude` | `{"days": 30 \| 180 \| 365, "confirm": true}`: block wagers and purchases; cannot be undone early |
 | GET | `/api/wallet/activity?since=ISO` | Bets, points wagered / won and net since a moment (reality check) |
+| GET / PUT | `/api/profile` | Nickname, cat avatar and play stats / `{"nickname": 2-12 chars, "avatar": "ginger" \| ...}` |
+| POST | `/api/profile/qr` | A signed QR code (SVG + PNG) and an 8-character counter code for the cashier. Works once, for 5 minutes |
+| GET | `/cashier` | Cashier page: scan or type the player's code, record a simulated counter payment. **Server computer only** (127.0.0.1) |
+| POST | `/api/cashier/lookup`, `/api/cashier/topup` | Cashier page actions (`{"code"}`, then `{"code", "amount_dollars", "confirmed": true}`); local only, `DEMO_MODE=1` for top-ups |
 | GET | `/api/leaderboard` | Top balances |
 | GET | `/crowd` | Phone page (crowd mode, up to 60 phones) |
 | POST | `/api/crowd/host`, `/api/crowd/open` | Big screen: become host, open betting |
 | POST | `/api/crowd/join`, `/api/crowd/bet`, `/api/crowd/cashout` | Phone actions (join takes `player_id` to rejoin and `age_confirmed` from the 19+ box) |
 | GET | `/api/crowd/state` | Shared table state (phones poll this) |
 
-Interactive docs: `http://127.0.0.1:8000/docs`.
+Interactive docs: `http://127.0.0.1:8001/docs`.
 
 ## Wallet rules
 
@@ -80,7 +85,7 @@ Interactive docs: `http://127.0.0.1:8000/docs`.
 |---|---|---|
 | Starting grant | 50 points, once per wallet | partial unique index on the ledger |
 | Daily free | 20 points, once per server calendar day | unique index (wallet, kind, day) |
-| $5 demo top-up | 40 points, repeatable | simulated payment receipt + ledger |
+| Demo top-up | any whole amount $1-$100, 8 points per $1, at most $200 a day (wallet screen and cashier together) | `WalletStore._charge` in the purchase transaction |
 | $5 demo parking bundle | 60 points, once per day | unique index (wallet, kind, day) |
 | Mock lottery ticket | 25 points, max 3 per wallet per day, each ticket id once ever | `lottery_tickets` primary key |
 | Wager | 1-500 whole points, never more than the balance | guarded UPDATE + `CHECK (balance >= 0)` |
@@ -94,6 +99,11 @@ Interactive docs: `http://127.0.0.1:8000/docs`.
   `"replayed": true`. The same key with a different request gets 422.
 - **Simulated payments:** `FakePaymentProvider` never contacts a payment network. Every receipt says
   `"simulated": true` with a notice. Real providers would implement `payments.PaymentProvider`.
+- **Cashier codes:** `identity.py` signs `{wallet, nonce, expiry}` with HMAC-SHA256. The
+  `qr_tokens` table (migration 0007) makes each code single-use: the top-up and marking the code used
+  happen in one transaction. The 8-character counter code under the QR is for typing when there's no
+  scanner. The cashier page only answers on the server computer and follows the same rules as the
+  wallet screen (19+, cool-off, self-exclusion, daily cap).
 - **Mock lottery tickets:** five two-digit numbers, 01-99, each exactly double the previous one
   (e.g. `01 02 04 08 16`). The server checks the pattern, that the ticket id was issued by this
   server, and that the numbers match it. Same numbers on different tickets are fine; each

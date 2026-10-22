@@ -183,6 +183,13 @@ class CrowdTable:
             if p is not None:
                 p["balance"] = self.store.balance(pid)
 
+    def rename(self, pid: str, name: str) -> None:
+        """A seated phone saved a new profile nickname."""
+        with self.lock:
+            p = self.players.get(pid or "")
+            if p is not None:
+                p["name"] = name[:12]
+
     def _player(self, pid: str) -> dict:
         p = self.players.get(pid or "")
         if p is None:

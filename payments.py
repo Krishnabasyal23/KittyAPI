@@ -29,10 +29,34 @@ class Product:
     once_per_day: bool
 
 
+# Top-ups: any whole-dollar amount, $1 = 8 points, $1-$100 each, at most $200 of top-ups per wallet
+# per server day (wallet and cashier together).
+POINTS_PER_DOLLAR = 8
+TOPUP_MIN_DOLLARS = 1
+TOPUP_MAX_DOLLARS = 100
+TOPUP_DAILY_CAP_DOLLARS = 200
+TOPUP_PRODUCTS = ("topup", "topup_5")
+
+
+def topup_product(dollars) -> Product:
+    """The top-up for a whole-dollar amount (raises ValueError outside $1-$100)."""
+    if isinstance(dollars, bool) or not isinstance(dollars, int):
+        raise ValueError("Top-up amount must be a whole number of dollars")
+    if not TOPUP_MIN_DOLLARS <= dollars <= TOPUP_MAX_DOLLARS:
+        raise ValueError(f"Top-up amount must be ${TOPUP_MIN_DOLLARS}-${TOPUP_MAX_DOLLARS}")
+    return Product("topup", f"${dollars} demo top-up", dollars * 100, dollars * POINTS_PER_DOLLAR, "topup", False)
+
+
 PRODUCTS = {
-    "topup_5": Product("topup_5", "$5 demo top-up", 500, 40, "topup", False),
+    "topup_5": Product("topup_5", "$5 demo top-up", 500, 40, "topup", False),   # older clients: $5 = 40
     "parking_5": Product("parking_5", "$5 demo parking bundle", 500, 60, "parking_bundle", True),
 }
+
+
+def product_label(product_id: str, amount_cents: int) -> str:
+    if product_id == "topup":
+        return f"${amount_cents // 100} demo top-up"
+    return PRODUCTS[product_id].label if product_id in PRODUCTS else product_id
 
 
 @dataclass(frozen=True)
@@ -63,6 +87,15 @@ class FakePaymentProvider:
             status="declined" if self.decline else "succeeded",
             provider=self.name,
         )
+
+
+class CashierProvider(FakePaymentProvider):
+    """A simulated counter payment: the cashier page records that the player paid at the counter."""
+
+    name = "cashier"
+
+    def charge(self, wallet_id: str, product: Product, idempotency_key: str) -> PaymentResult:
+        return PaymentResult(payment_id="counter_" + uuid.uuid4().hex, status="succeeded", provider=self.name)
 
 
 def payment_provider() -> PaymentProvider | None:

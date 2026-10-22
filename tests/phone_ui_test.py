@@ -135,7 +135,7 @@ async def main():
             check("daily free -> 70", "70 points" in await sheet_text())
 
             # demo checkout
-            await js("openPay('topup_5')")
+            await js("document.getElementById('tuAmt').value='7'; openTopup()")
             await asyncio.sleep(0.5)
             check("pay disabled before checkbox+method", await js("document.getElementById('payBtn').disabled") is True)
             await js("pickMethod('card')")
@@ -148,7 +148,7 @@ async def main():
             await js("document.getElementById('payBtn').click()")
             await asyncio.sleep(1.5)
             text = await sheet_text()
-            check("receipt shown (+40, simulated)", "Receipt (simulated)" in text and "+40" in text, text[:160])
+            check("receipt shown ($7 -> +56, simulated)", "Receipt (simulated)" in text and "+56" in text and "$7.00" in text, text[:160])
             await shot("04_receipt")
 
             # mock ticket
@@ -163,6 +163,19 @@ async def main():
             await asyncio.sleep(1)
             message = await js("document.getElementById('tMsg').textContent")
             check("same ticket refused", "already redeemed" in message, message)
+
+            # profile + cashier code
+            await js("openProfile()")
+            await asyncio.sleep(1)
+            await js("document.getElementById('pfName').value='Tess'; pickAvatar('calico'); saveProfile()")
+            await asyncio.sleep(1)
+            check("profile saved", "Saved as Tess" in await js("document.getElementById('pfMsg').textContent"))
+            await js("showQr()")
+            await asyncio.sleep(1)
+            check("cashier QR shown", await js("!!document.querySelector('#qrBox svg')") is True)
+            counter_code = await js("document.querySelector('#qrBox b').textContent")
+            check("counter code shown", len(counter_code or "") == 9, counter_code)
+            await shot("04b_profile_qr")
 
             # history
             await js("openHistory()")
@@ -208,6 +221,33 @@ async def main():
             await js("document.getElementById('coolOk').checked=true; coolOff(1)")
             await asyncio.sleep(1)
             check("break shown after cool-off", "Taking a break until" in await sheet_text())
+
+            # cashier page (same computer) tops up with the counter code, once
+            await cdp("Emulation.setDeviceMetricsOverride", width=900, height=900, deviceScaleFactor=1, mobile=False)
+            await cdp("Page.navigate", url="http://127.0.0.1:8001/cashier")
+            await asyncio.sleep(1.5)
+            await js(f"document.getElementById('code').value={json.dumps(counter_code)}; document.getElementById('lookup').click()")
+            await asyncio.sleep(1)
+            check("cashier finds the player", await js("document.getElementById('nickname').textContent") == "Tess")
+            await js("document.getElementById('amount').value='3'; updatePoints(); const c=document.getElementById('confirm'); c.checked=true; updatePoints(); document.getElementById('topup').click()")
+            await asyncio.sleep(1)
+            msg = await js("document.getElementById('topupMsg').textContent")
+            check("cashier credit refused during the break", "cooling off" in msg.lower(), msg)
+            other = httpx.post("http://127.0.0.1:8001/api/sessions").json()["session_id"]
+            httpx.post("http://127.0.0.1:8001/api/wallet/age-confirm", headers={"X-Session-ID": other}, json={"confirm": True})
+            other_code = httpx.post("http://127.0.0.1:8001/api/profile/qr", headers={"X-Session-ID": other}).json()["counter_code"]
+            await js("document.getElementById('cancel').click()")
+            await js(f"document.getElementById('code').value={json.dumps(other_code)}; document.getElementById('lookup').click()")
+            await asyncio.sleep(1)
+            await js("document.getElementById('amount').value='3'; const k=document.getElementById('confirm'); k.checked=true; updatePoints(); document.getElementById('topup').click()")
+            await asyncio.sleep(1)
+            msg = await js("document.getElementById('topupMsg').textContent")
+            check("cashier credits $3 = 24 points", "Credited 24 points" in msg, msg)
+            await shot("09_cashier")
+            await js(f"document.getElementById('code').value={json.dumps(other_code)}; document.getElementById('lookup').click()")
+            await asyncio.sleep(1)
+            msg = await js("document.getElementById('lookupMsg').textContent")
+            check("cashier code works once", "already used" in msg, msg)
     finally:
         if chrome:
             chrome.terminate()
