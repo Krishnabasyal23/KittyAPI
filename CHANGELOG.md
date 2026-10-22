@@ -2,6 +2,18 @@
 
 All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0-alpha.10] - 2026-10-22
+
+Operator dashboard.
+
+### Added
+- `/operator` (server computer only): live RTP today / all time / per season, bets, players (active
+  today, PC and phone), top-ups by source, points in wallets, safe-play counts, ledger audit, daily
+  charts (wagered vs paid back, RTP, top-ups) and a daily table. Light and dark themes, no external files.
+- `/api/operator/summary` and CSV exports (`daily`, `bets`, `payments`, `ledger`), local only.
+- `reports.py`: read-only report queries. Only settled bets count (interrupted and refunded don't).
+- `/api/health` reports version `2.0.0-alpha.10`.
+
 ## [2.0.0-alpha.9] - 2026-10-22
 
 Safe play page.
