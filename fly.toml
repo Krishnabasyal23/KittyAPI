@@ -8,6 +8,7 @@ primary_region = "yyz"
 
 [env]
   PUBLIC_MODE = "1"
+  AUTO_HOST = "1"
   KITTY_DB_PATH = "/data/catino-v2.db"
   PORT = "8001"
 
