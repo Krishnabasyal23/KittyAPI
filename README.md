@@ -80,7 +80,8 @@ Player endpoints take the wallet id in the `X-Session-ID` header: the PC session
 | GET | `/crowd` | Phone page (crowd mode, up to 60 phones) |
 | POST | `/api/crowd/host`, `/api/crowd/open` | Big screen: become host, open betting |
 | POST | `/api/crowd/join`, `/api/crowd/bet`, `/api/crowd/cashout` | Phone actions (join takes `player_id` to rejoin and `age_confirmed` from the 19+ box) |
-| GET | `/api/crowd/state` | Shared table state (phones poll this) |
+| GET | `/api/crowd/state` | Shared table state (`?player_id=&lang=fr`); the game screen polls it |
+| WS | `/ws/crowd?player_id=&lang=` | The same state pushed to phones (up to 5 a second, only when it changed). Phones fall back to polling if it drops |
 
 Interactive docs: `http://127.0.0.1:8001/docs`.
 

@@ -1,4 +1,6 @@
 
+import asyncio
+import json
 import math
 import os
 import socket
@@ -7,7 +9,8 @@ import uuid
 
 from pathlib import Path
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -18,6 +21,7 @@ from season_rules import describe as describe_season, live as season_live, apply
 
 MAX_PLAYERS = 60
 HTML_FILE = Path(__file__).resolve().parent / "crowd.html"
+PUSH_SECONDS = 0.2     # WebSocket push interval (phones used to poll every 0.3 s)
 ASSET_DIR = Path(__file__).resolve().parent / "crowd_assets"   # cat1.png ... cat6.png (the phone's cat)
 
 
@@ -441,5 +445,22 @@ def make_router(table: CrowdTable) -> APIRouter:
     @r.get("/api/crowd/state")
     def state(player_id: str = "", lang: str = "en"):
         return table.state(player_id, lang[:5])
+
+    @r.websocket("/ws/crowd")
+    async def state_stream(ws: WebSocket, player_id: str = "", lang: str = "en"):
+        """The same state as /api/crowd/state, pushed up to 5 times a second, only when it changed.
+        Phones use this instead of polling and fall back to polling if the socket drops."""
+        await ws.accept()
+        last = None
+        try:
+            while True:
+                data = await asyncio.to_thread(table.state, player_id, lang[:5])
+                text = json.dumps(jsonable_encoder(data))
+                if text != last:
+                    await ws.send_text(text)
+                    last = text
+                await asyncio.sleep(PUSH_SECONDS)
+        except (WebSocketDisconnect, RuntimeError, OSError):
+            pass                                  # the phone left or the connection dropped
 
     return r

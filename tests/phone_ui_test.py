@@ -118,6 +118,8 @@ async def main():
             pid = await js("localStorage.getItem('kc_pid')")
             limits = httpx.get("http://127.0.0.1:8001/api/wallet/limits", headers={"X-Session-ID": pid}).json()
             check("server recorded 19+", limits["age_confirmed"] is True)
+            await asyncio.sleep(1)
+            check("live updates over WebSocket (polling stopped)", await js("liveOk && pollTimer === null") is True)
             await asyncio.sleep(2)
             check("no panel open after joining", await js("document.getElementById('sheet').classList.contains('hidden')") is True)
             sprites = await js("Object.values(sheets).filter(i => i.complete && i.naturalWidth > 0).length")
