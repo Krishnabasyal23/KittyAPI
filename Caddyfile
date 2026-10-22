@@ -1,0 +1,7 @@
+# Caddy in front of the server on a VM (gets a free HTTPS certificate for your domain by itself).
+# Replace the name, then: caddy run --config Caddyfile
+# reverse_proxy adds X-Forwarded-For, which the server uses to tell visitors apart.
+catino.example.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8001
+}

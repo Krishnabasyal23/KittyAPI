@@ -34,8 +34,16 @@ code never opens.
 | `GAME_RNG_MODE` | `hybrid` | `hybrid` (simulated quantum XOR `secrets`) or `secure` (`secrets` only). Any other value, including the seeded `classical` mode, stops the server at start-up. |
 | `CORS_ORIGINS` | localhost dev ports | Comma-separated browser origins allowed to call the API. |
 | `PUBLIC_URL` | LAN IP + port | Base URL put in the crowd-mode join QR (e.g. when behind a tunnel). |
+| `PUBLIC_MODE` | unset | `1` (exactly) for a server reachable from the internet: closes the cashier/operator pages, limits abuse, lets only the local game host. See [docs/DEPLOY.md](docs/DEPLOY.md). |
+| `ALLOW_PUBLIC_DEMO` | unset | `1` lets `DEMO_MODE=1` simulated purchases work in public mode (points only). |
 | `QR_SECRET` | random per start | Key that signs the cashier QR codes. Unset: a new random key at each start, so open codes die on restart (they only last 5 minutes anyway). |
 | `KITTY_TEST_TMP` | `<project>/.tmp` | Where tests and scripts put their throwaway databases and logs. |
+
+## Online
+
+`PUBLIC_MODE=1` plus a tunnel, a container host or a VM puts the phone page and the join QR on a public https
+address. Steps, the backup/reset tool and a pre-demo checklist: [docs/DEPLOY.md](docs/DEPLOY.md). From the Unity
+project root, `start_tunnel.bat` and `start_public.bat` do the tunnel route on Windows.
 
 ## Endpoints
 
