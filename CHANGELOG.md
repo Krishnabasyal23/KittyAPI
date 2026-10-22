@@ -2,6 +2,20 @@
 
 All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0-alpha.6] - 2026-10-22
+
+Ticket bonus with a secret key.
+
+### Changed
+- Ticket codes are typed (no picker) and checked against a secret key from `TICKET_SECRET`.
+  Without the key, ticket entry is off. `POST /api/wallet/lottery/redeem` takes `{"code"}`.
+- One ticket per wallet per day (was 3), still 25 points.
+- Every code that doesn't verify gets "That ticket couldn't be verified".
+- Three wrong codes in a row pause ticket entry for an hour (429; migration 0008 `ticket_entry`).
+- The ticket helper endpoint is hidden from the API docs, local only and `DEMO_MODE=1` only.
+- Settings and secrets can live in an untracked `KittyAPI/.env.local` (`local_env.py`).
+- `/api/health` reports version `2.0.0-alpha.6`.
+
 ## [2.0.0-alpha.5] - 2026-10-22
 
 Phase 4: profiles, signed single-use QR codes and the cashier page.
@@ -54,14 +68,14 @@ Phase 2: persistent wallet backend.
   per server day, `audit()` for ledger consistency.
 - Simulated purchases behind `DEMO_MODE=1`, Idempotency-Key required: $5 top-up = 40 points, $5
   parking bundle = 60 points once per day. FakePayment provider, receipts labelled simulated.
-- Mock lottery tickets behind `DEMO_MODE=1`: server-issued ids, five doubling two-digit
-  numbers checked on the server, 25 points, max 3 per wallet per day, each id once ever.
+- Mock lottery tickets behind `DEMO_MODE=1` (replaced in 2.0.0-alpha.6): 25 points, max 3 per
+  wallet per day, each ticket once ever.
 - Idempotency keys for rewards, purchases and ticket redemptions.
 - Responsible-gambling backend hooks: replaceable `WalletPolicy`, `rg_settings` (self-exclusion,
   cool-off, daily spend limit, reality-check interval, age confirmation). No UI yet.
 - Fairness seals persisted with each round; `/verify` works after a restart.
-- Endpoints `/api/wallet`, `/ledger`, `/receipts`, `/daily-free`, `/purchase`, `/lottery/redeem`,
-  `/api/demo/lottery/tickets`. `/api/health` adds `min_bet`, `max_bet`, `db_schema`, `demo_mode`.
+- Endpoints `/api/wallet`, `/ledger`, `/receipts`, `/daily-free`, `/purchase`, `/lottery/redeem`.
+  `/api/health` adds `min_bet`, `max_bet`, `db_schema`, `demo_mode`.
 
 ### Changed
 - **Balances are whole points** (were 2-decimal credits). Starting balance 50 (was 1000). Payouts
