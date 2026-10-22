@@ -494,6 +494,17 @@ def make_router(table: CrowdTable) -> APIRouter:
     def seed(body: SeedBody):
         return table.seed(body.player_id, body.seed)
 
+    @r.get("/api/crowd/join-info")
+    def join_info(request: Request):
+        """Where phones join and the QR code for it, without taking the host seat (the web game shows this)."""
+        base = os.getenv("PUBLIC_URL", "").strip().rstrip("/")
+        if not base:
+            scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+            host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+            base = f"{scheme}://{host}"
+        url = base + "/crowd"
+        return {"join_url": url, "qr": _qr_rows(url)}
+
     @r.get("/api/crowd/box")
     def box():
         return table.box()

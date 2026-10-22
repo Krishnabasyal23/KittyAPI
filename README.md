@@ -85,6 +85,8 @@ Player endpoints take the wallet id in the `X-Session-ID` header: the PC session
 | GET | `/api/operator/export/{daily,bets,payments,ledger,audit}.csv` | CSV exports (local only) |
 | GET / PUT | `/api/operator/bonus` | Season bonus tuning: `{"butterfly": 0-4, "cocoa": 0-4}` (whole percent). The cap keeps every strategy under 100% RTP; saved, and logged in the audit log (local only) |
 | GET | `/api/operator/audit?limit=100&wallet_id=` | Audit log, newest first (local only) |
+| GET | `/api/crowd/join-info` | Where phones join and its QR code, without taking the host seat (the web game shows it) |
+| GET | `/play` | The web build of the game, when `web/play` exists (Kitty Crash > Build > WebGL in Unity) |
 | GET | `/api/leaderboard` | Top balances |
 | GET | `/crowd` | Phone page (crowd mode, up to 60 phones) |
 | POST | `/api/crowd/host`, `/api/crowd/open` | Big screen: become host, open betting |

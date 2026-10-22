@@ -17,6 +17,8 @@ from fastapi import (
     Request,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -158,6 +160,13 @@ app.add_middleware(
 )
 
 app.middleware("http")(public_guard)
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+# The web build of the game (Unity WebGL, see Kitty Crash > Build > WebGL), served from the same address as the API
+# so the page talks to the server it came from. Absent until a build is copied here.
+PLAY_DIR = Path(os.getenv("PLAY_DIR") or Path(__file__).resolve().parent / "web" / "play")
+if (PLAY_DIR / "index.html").is_file():
+    app.mount("/play", StaticFiles(directory=PLAY_DIR, html=True), name="play")
 
 app.include_router(make_crowd_router(crowd))
 

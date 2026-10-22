@@ -5,6 +5,8 @@ All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangel
 ## [Unreleased]
 
 ### Added
+- `/play` serves the Unity WebGL build of the game from `web/play`, on the same address as the API (responses are gzip-compressed).
+  `GET /api/crowd/join-info` gives the join address and QR code without taking the host seat.
 - Auto host (`AUTO_HOST=1`, `autohost.py`): a house table that runs by itself. The server's own wallet ("House Cat") takes the host
   seat, opens betting, bets one point, runs the walk and starts again while a phone is watching, so a hosted server plays without
   the Unity game. It steps aside for a real host and takes the seat back after 60 s of stillness. Seven tests.
