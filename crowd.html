@@ -455,6 +455,22 @@
             padding: 10px
         }
 
+        .tour { text-align: center; }
+        .tour .stage { position: relative; height: 300px; border-radius: 16px; background: rgba(255,255,255,.05); overflow: hidden; margin: 6px 0 12px; }
+        .tour .m { position: absolute; left: 0; right: 0; top: 14px; font-size: 54px; font-weight: 800; }
+        .tour .cat { position: absolute; left: 18%; top: 120px; font-size: 64px; }
+        .tour .fish { position: absolute; right: 16%; top: 150px; font-size: 44px; }
+        .tour .bang { position: absolute; left: 24%; top: 80px; font-size: 40px; }
+        .tour .face { position: absolute; right: 8%; top: 18px; font-size: 44px; }
+        .tour .btn { position: absolute; right: 8%; bottom: 18px; width: 150px; height: 58px; border-radius: 14px; font-size: 30px; font-weight: 800; line-height: 58px; color: #17121f; }
+        .tour .chip { position: absolute; left: 10%; bottom: 22px; width: 52px; height: 52px; border-radius: 50%; background: var(--orange, #ffa62e); font-weight: 800; line-height: 52px; color: #17121f; }
+        .tour .paw { position: absolute; right: 12%; bottom: -6px; font-size: 40px; }
+        .tour .coins { position: absolute; right: 10%; bottom: 84px; font-size: 32px; font-weight: 800; color: var(--green, #4fe08a); }
+        .tour .nav { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .tour .nav button { width: 64px; }
+        .tour .dots span { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin: 0 5px; background: rgba(255,255,255,.25); }
+        .tour .dots span.on { background: var(--orange, #ffa62e); }
+
         .sheet.hidden {
             display: none
         }
@@ -654,7 +670,7 @@
                 "st.walking": "Kitty is walking… CASH OUT in time!", "st.watching": "Watching this walk",
                 "st.distracted": "Distracted by {0}! Next walk soon", "st.noGame": "Can't reach the game - same Wi-Fi?",
                 "m.title": "☰ Menu", "m.wallet": "👛 Wallet: free points, top-up, ticket", "m.profile": "🐱 Profile &amp; cashier code",
-                "m.safe": "🛟 Safe play: limits, breaks, self-exclusion", "m.howto": "❓ How to play", "m.reset": "🔄 New demo player",
+                "m.safe": "🛟 Safe play: limits, breaks, self-exclusion", "m.howto": "❓ How to play", "m.rules": "📜 Rules", "m.reset": "🔄 New demo player",
                 "m.back": "Back to the game",
                 "h.title": "❓ How to play", "h.1": "1. While betting is open, pick a bet and tap BET.",
                 "h.2": "2. The cat on the big screen starts walking and the multiplier climbs.",
@@ -685,7 +701,7 @@
                 "st.walking": "Le chat marche… ENCAISSEZ à temps!", "st.watching": "Vous regardez cette promenade",
                 "st.distracted": "Distrait par {0}! Prochaine promenade bientôt", "st.noGame": "Jeu injoignable - même Wi-Fi?",
                 "m.title": "☰ Menu", "m.wallet": "👛 Portefeuille : points gratuits, recharge, billet", "m.profile": "🐱 Profil et code caisse",
-                "m.safe": "🛟 Jeu responsable : limites, pauses, auto-exclusion", "m.howto": "❓ Comment jouer", "m.reset": "🔄 Nouveau joueur (démo)",
+                "m.safe": "🛟 Jeu responsable : limites, pauses, auto-exclusion", "m.howto": "❓ Comment jouer", "m.rules": "📜 Règles", "m.reset": "🔄 Nouveau joueur (démo)",
                 "m.back": "Retour au jeu",
                 "h.title": "❓ Comment jouer", "h.1": "1. Pendant les mises, choisissez une mise et touchez MISER.",
                 "h.2": "2. Le chat du grand écran se met à marcher et le multiplicateur monte.",
@@ -1376,7 +1392,8 @@
                 <button class="opt" onclick="openWallet()">${tr("m.wallet")}</button>
                 <button class="opt" onclick="openProfile()">${tr("m.profile")}</button>
                 <button class="opt" onclick="openSafePlay()">${tr("m.safe")}</button>
-                <button class="opt" onclick="openHowTo()">${tr("m.howto")}</button>
+                <button class="opt" onclick="openTour()">${tr("m.howto")}</button>
+                <button class="opt" onclick="openHowTo()">${tr("m.rules")}</button>
                 ${WAL && WAL.demo_mode ? `<button class="opt" onclick="openDemoReset()">${tr("m.reset")}</button>` : ""}
                 <button class="opt" onclick="toggleLang(); openMenu()">🌐 ${tr("lang.switch")}</button>
                 <button class="ghost" onclick="closePanel()">${tr("m.back")}</button>`);
@@ -1404,6 +1421,66 @@
                 <div class="dim">${tr("r.ask")}</div>
                 <button class="big go" onclick="localStorage.removeItem('kc_pid'); location.reload()">${tr("r.yes")}</button>
                 <button class="ghost" onclick="openMenu()">${tr("cancel")}</button>`);
+        }
+
+        // how to play without words: four animated slides (bet, the walk, cash out in time, distracted)
+        let tourPage = 0, tourT0 = 0, tourTimer = null;
+        function openTour() {
+            try { localStorage.setItem("kc_tour", "1") } catch { }
+            showPanel(`
+                <div class="tour">
+                    <div class="row"><span></span><button class="ghost" style="width:auto" onclick="closeTour()">✕</button></div>
+                    <div class="stage" id="tStage">
+                        <div class="m" id="tM">1.00x</div><div class="face" id="tFace">😺</div>
+                        <div class="cat" id="tCat">🐈</div><div class="fish" id="tFish">🐟</div><div class="bang" id="tBang">❗</div>
+                        <div class="coins" id="tCoins"></div><div class="chip" id="tChip">10</div>
+                        <div class="btn" id="tBtn">10</div><div class="paw" id="tPaw">👆</div>
+                    </div>
+                    <div class="nav"><button class="opt" onclick="tourGo(tourPage - 1)">◀</button>
+                        <div class="dots">${[0, 1, 2, 3].map(i => `<span id="tDot${i}" onclick="tourGo(${i})"></span>`).join("")}</div>
+                        <button class="opt" onclick="tourGo(tourPage + 1)">▶</button></div>
+                </div>`);
+            tourGo(0);
+            clearInterval(tourTimer);
+            tourTimer = setInterval(tourTick, 50);
+        }
+        function closeTour() { clearInterval(tourTimer); tourTimer = null; closePanel(); }
+        function tourGo(p) {
+            if (p > 3) { closeTour(); return; }
+            tourPage = Math.max(0, p); tourT0 = performance.now();
+            for (let i = 0; i < 4; i++) { const d = $("tDot" + i); if (d) d.className = i === tourPage ? "on" : ""; }
+        }
+        function tourTick() {
+            if (!$("tStage") || !panelOpen()) { clearInterval(tourTimer); tourTimer = null; return; }
+            const t = ((performance.now() - tourT0) / 1000) % 4, show = (id, on) => { $(id).style.visibility = on ? "visible" : "hidden" };
+            const GREEN = "var(--green, #4fe08a)", ORANGE = "var(--orange, #ffa62e)", RED = "var(--red, #ff5a6a)";
+            let m = 1, face = "😺", btn = GREEN, label = "10", coins = "", mColor = "";
+            show("tFish", false); show("tBang", false); show("tPaw", true); show("tChip", true);
+            $("tChip").style.transform = ""; $("tPaw").style.transform = "";
+            $("tCat").style.transform = `translateX(${Math.sin(t * 3) * 12}px) translateY(${Math.abs(Math.sin(t * 9)) * -6}px) scaleX(-1)`;   // face the fish
+            if (tourPage === 0) {                       // a paw taps BET, the chip jumps in
+                $("tPaw").style.transform = `translateY(${-Math.abs(Math.sin(t * 3)) * 22}px)`;
+                const k = Math.min(1, Math.max(0, (t - 1.6) * 2));
+                $("tChip").style.transform = `translateX(${k * 190}px)`;
+                show("tChip", t < 2.1);
+                if (t > 1.6) { btn = "#2f9a57"; face = "😸"; }
+            } else if (tourPage === 1) {                // the walk: the multiplier climbs
+                show("tPaw", false); m = Math.exp(0.35 * t); btn = ORANGE; label = (10 * m).toFixed(0);
+                if (m > 2.5) face = "😸";
+            } else if (tourPage === 2) {                // cash out in time
+                m = Math.exp(0.35 * Math.min(t, 2)); const cashed = t >= 2;
+                btn = cashed ? GREEN : ORANGE; label = (10 * m).toFixed(0);
+                $("tPaw").style.transform = cashed ? "" : `translateY(${-Math.abs(Math.sin(t * 4)) * 22}px)`;
+                coins = cashed ? "+" + (10 * m).toFixed(0) : ""; face = cashed ? "😻" : "😺"; if (cashed) mColor = GREEN;
+            } else {                                    // the cat sees a fish first: lost
+                show("tPaw", false); m = Math.exp(0.35 * Math.min(t, 2.2)); const lost = t >= 2.2;
+                show("tFish", t >= 1.6); show("tBang", lost); show("tChip", !lost);
+                btn = lost ? "#55506a" : ORANGE; label = lost ? "-10" : (10 * m).toFixed(0);
+                face = lost ? "😿" : "😺"; if (lost) mColor = RED;
+            }
+            $("tM").textContent = m.toFixed(2) + "x"; $("tM").style.color = mColor;
+            $("tFace").textContent = face; $("tBtn").style.background = btn; $("tBtn").textContent = label;
+            $("tCoins").textContent = coins;
         }
 
         // profile + signed single-use cashier code
@@ -1553,7 +1630,12 @@
         $("menuBtn").onclick = openMenu;
         $("sheet").onclick = e => { if (e.target.id === "sheet") closePanel(); };
         if (pid) startRealityCheck();
-        else $("joinBtn").addEventListener("click", () => setTimeout(() => { if (pid) startRealityCheck(); }, 800));
+        else $("joinBtn").addEventListener("click", () => setTimeout(() => {
+            if (!pid) return;
+            startRealityCheck();
+            let seen = true; try { seen = localStorage.getItem("kc_tour") === "1" } catch { }
+            if (!seen && !panelOpen()) openTour();
+        }, 800));
     </script>
 </body>
 
