@@ -28,7 +28,8 @@ code never opens.
 | Variable | Default | Purpose |
 |---|---|---|
 | `KITTY_DB_PATH` | `data/catino-v2.db` | v2 SQLite file (wallets, ledger, rounds, receipts). Tests and scripts use their own files under `.tmp`. The v1 file is refused. |
-| `DEMO_MODE` | unset | `1` (exactly) enables **simulated** purchases (FakePayment, no money moves) and **mock** lottery tickets. Off: those endpoints answer 503. `/api/health` shows `demo_mode` and a notice. |
+| `DEMO_MODE` | unset | `1` (exactly) enables **simulated** purchases (FakePayment, no money moves) and the cashier page top-ups. Off: those endpoints answer 503. `/api/health` shows `demo_mode` and a notice. |
+| `TICKET_SECRET` | unset | Key (16+ characters) that decides which ticket codes are genuine. Unset: ticket entry is off. Keep it out of git. |
 | `HAPPY_HOUR` | unset | `1` (exactly) restores the demo season bonuses: butterfly +25%, cocoa +10%. Default is +4% for both, which keeps every strategy under 100% RTP. `/api/health` then shows `"promo": "HAPPY HOUR (demo)"`. Demos only. |
 | `GAME_RNG_MODE` | `hybrid` | `hybrid` (simulated quantum XOR `secrets`) or `secure` (`secrets` only). Any other value, including the seeded `classical` mode, stops the server at start-up. |
 | `CORS_ORIGINS` | localhost dev ports | Comma-separated browser origins allowed to call the API. |
@@ -60,8 +61,7 @@ Player endpoints take the wallet id in the `X-Session-ID` header: the PC session
 | GET | `/api/wallet/receipts` | Simulated payment receipts |
 | POST | `/api/wallet/daily-free` | +20 points, once per server calendar day (409 after) |
 | POST | `/api/wallet/purchase` | `{"product": "topup", "amount_dollars": 1-100, "confirmed": true}` or `{"product": "parking_5", ...}`, **Idempotency-Key required**, `DEMO_MODE=1` only. `confirmed` is the "simulated payment" checkbox. 402 with the receipt if declined |
-| POST | `/api/wallet/lottery/redeem` | `{"ticket_id", "numbers": "01 02 04 08 16"}`: +25 points, `DEMO_MODE=1` only |
-| POST | `/api/demo/lottery/tickets` | Issue a mock ticket (optional `{"numbers": ...}`), `DEMO_MODE=1` only |
+| POST | `/api/wallet/lottery/redeem` | `{"code": "..."}`, the code typed from a demo ticket: +25 points, one a day. Needs `TICKET_SECRET` |
 | POST | `/api/wallet/age-confirm` | `{"confirm": true}`: self-attested 19+ (no ID check). Required before any wager or purchase |
 | GET / PUT | `/api/wallet/limits` | Play-safe state and choices / `{"daily_spend_limit_points": n \| null, "reality_check_minutes": 15 \| 30 \| 60}` |
 | POST | `/api/wallet/cool-off` | `{"hours": 1 \| 24 \| 168, "confirm": true}`: pause wagers and purchases; extend only |
@@ -87,7 +87,7 @@ Interactive docs: `http://127.0.0.1:8001/docs`.
 | Daily free | 20 points, once per server calendar day | unique index (wallet, kind, day) |
 | Demo top-up | any whole amount $1-$100, 8 points per $1, at most $200 a day (wallet screen and cashier together) | `WalletStore._charge` in the purchase transaction |
 | $5 demo parking bundle | 60 points, once per day | unique index (wallet, kind, day) |
-| Mock lottery ticket | 25 points, max 3 per wallet per day, each ticket id once ever | `lottery_tickets` primary key |
+| Ticket bonus | 25 points, one ticket per wallet per day, each code once ever; 3 wrong codes in a row pause entry for 1 hour | `lottery_tickets` primary key, `ticket_entry` (migration 0008) |
 | Wager | 1-500 whole points, never more than the balance | guarded UPDATE + `CHECK (balance >= 0)` |
 | Payout | wager × multiplier (Decimal), rounded **half to even** to whole points | `economy.calculate_cashout` |
 
@@ -104,11 +104,12 @@ Interactive docs: `http://127.0.0.1:8001/docs`.
   happen in one transaction. The 8-character counter code under the QR is for typing when there's no
   scanner. The cashier page only answers on the server computer and follows the same rules as the
   wallet screen (19+, cool-off, self-exclusion, daily cap).
-- **Mock lottery tickets:** five two-digit numbers, 01-99, each exactly double the previous one
-  (e.g. `01 02 04 08 16`). The server checks the pattern, that the ticket id was issued by this
-  server, and that the numbers match it. Same numbers on different tickets are fine; each
-  ticket id redeems once. `lottery.LotteryValidator` is replaceable. These aren't real lottery
-  tickets and nothing here validates real ones.
+- **Ticket bonus:** the player types the code from a demo ticket. Whether a code is genuine
+  depends only on the server's secret key (`TICKET_SECRET`), so nothing in the code or the docs lets
+  anyone make one. Every code that doesn't verify (wrong, mistyped or already used) gets the same
+  answer: "That ticket couldn't be verified". After three in a row, entry pauses for an hour (429).
+  The daily limit is checked first, so it never uses up tries. `lottery.LotteryValidator` is
+  replaceable. These aren't real lottery tickets and nothing here validates real ones.
 - **Play safe (responsible gambling):** `responsible.WalletPolicy` is consulted before every wager
   and purchase. A blocked request returns 403 and moves nothing. `DefaultPolicy` enforces:
   - the 19+ self-attestation;

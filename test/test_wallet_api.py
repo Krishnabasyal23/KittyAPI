@@ -74,27 +74,40 @@ def test_purchase_and_retry(demo):
     assert len(client.get("/api/wallet/receipts", headers=h).json()) == 1
 
 
-def test_lottery_flow(demo):
-    h = new_wallet()
-    ticket = client.post("/api/demo/lottery/tickets").json()
-    assert "not a real lottery ticket" in ticket["notice"]
+local = TestClient(main.app, client=("127.0.0.1", 50001))
 
-    redeemed = client.post("/api/wallet/lottery/redeem", headers=h,
-                           json={"ticket_id": ticket["ticket_id"], "numbers": ticket["numbers"]})
+
+def test_ticket_flow(demo):
+    h = new_wallet()
+    code = local.post("/api/demo/lottery/tickets").json()["code"]
+    redeemed = client.post("/api/wallet/lottery/redeem", headers=h, json={"code": code})
     assert redeemed.status_code == 200 and redeemed.json()["balance"] == 75
 
-    reused = client.post("/api/wallet/lottery/redeem", headers=new_wallet(),
-                         json={"ticket_id": ticket["ticket_id"], "numbers": ticket["numbers"]})
-    assert reused.status_code == 409
+    reused = client.post("/api/wallet/lottery/redeem", headers=new_wallet(), json={"code": code})
+    assert reused.status_code == 400 and reused.json()["detail"] == "That ticket couldn't be verified"
 
-    bad = client.post("/api/demo/lottery/tickets", json={"numbers": "01 02 04 08 15"}).json()
-    refused = client.post("/api/wallet/lottery/redeem", headers=h,
-                          json={"ticket_id": bad["ticket_id"], "numbers": bad["numbers"]})
-    assert refused.status_code == 400
+    other = new_wallet()
+    for _ in range(3):
+        wrong = client.post("/api/wallet/lottery/redeem", headers=other, json={"code": "wrong"})
+        assert wrong.json()["detail"] == "That ticket couldn't be verified"
+    locked = client.post("/api/wallet/lottery/redeem", headers=other, json={"code": code})
+    assert locked.status_code == 429
+    assert client.get("/api/wallet", headers=other).json()["lottery"]["locked_until"]
 
 
-def test_lottery_off_without_demo_mode(no_demo):
-    assert client.post("/api/demo/lottery/tickets").status_code == 503
+def test_ticket_helper_is_hidden_and_dev_only(no_demo):
+    assert local.post("/api/demo/lottery/tickets").status_code == 404
+    assert "/api/demo/lottery/tickets" not in client.get("/openapi.json").json()["paths"]
+
+
+def test_ticket_helper_is_local_only(demo):
+    assert client.post("/api/demo/lottery/tickets").status_code == 403
+
+
+def test_tickets_work_without_demo_mode(no_demo):
+    from lottery import lottery_validator
+    code = lottery_validator().issue()
+    assert client.post("/api/wallet/lottery/redeem", headers=new_wallet(), json={"code": code}).status_code == 200
 
 
 def test_ledger_shows_every_move(demo):
