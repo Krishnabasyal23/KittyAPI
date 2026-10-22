@@ -41,7 +41,7 @@ from season_rules import (
 )
 
 
-VERSION = "2.0.0-alpha.12"
+VERSION = "2.0.0-beta.1"
 
 
 load_local_env()
@@ -101,7 +101,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Quantum Cat Crash API",
+    title="Catino API",
     description=(
         "Quantum-inspired crash game "
         "with persistent virtual credits."
@@ -170,7 +170,7 @@ DEMO_NOTICE = "DEMO MODE: payments are simulated and tickets are demo tickets"
 def health():
     return {
         "status": "ok",
-        "game": "Quantum Cat Crash",
+        "game": "Catino",
         "version": VERSION,
         "rng_mode": GAME_RNG_MODE,
         "bonus_pct": bonus_percents(),

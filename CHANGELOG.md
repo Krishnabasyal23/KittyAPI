@@ -4,6 +4,13 @@ All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangel
 
 ## [Unreleased]
 
+## [2.0.0-beta.1] - 2026-10-22
+
+First beta of v2.
+
+### Changed
+- The API and `/api/health` call the game "Catino". `/api/health` reports version `2.0.0-beta.1`.
+
 ### Added
 - Season rule texts in French: `GET/POST /api/season/next?lang=fr` and `/api/crowd/state?lang=fr`
   (bonus numbers are still the server's).
