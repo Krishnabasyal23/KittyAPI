@@ -265,6 +265,11 @@
             color: var(--orange)
         }
 
+        details.fold > summary { cursor: pointer; list-style: none; }
+        details.fold > summary::-webkit-details-marker { display: none; }
+        details.fold > summary b::before { content: "▸ "; color: var(--dim, #9a93b8); }
+        details.fold[open] > summary b::before { content: "▾ "; }
+
         .list {
             display: flex;
             flex-direction: column;
@@ -601,15 +606,15 @@
         <button class="big cash hidden" id="cashBtn">CASH OUT</button>
         <div id="msg"></div>
 
-        <div class="card">
-            <div class="row" style="margin-bottom:8px"><b>This walk</b><span class="dim" id="riders"></span></div>
-            <div class="list" id="players"></div>
-        </div>
-        <div class="card">
-            <b>Leaderboard</b>
+        <details class="card fold" open>
+            <summary class="row"><b>This walk</b><span class="dim" id="riders"></span></summary>
+            <div class="list" id="players" style="margin-top:8px"></div>
+        </details>
+        <details class="card fold">
+            <summary><b>Leaderboard</b></summary>
             <div class="list" id="board" style="margin-top:8px"></div>
-        </div>
-        <button class="ghost" id="safeBtn">🛟 Play safe: limits, breaks, self-exclusion</button>
+        </details>
+        <button class="ghost" id="menuBtn">☰ Menu: how to play, safe play, profile</button>
     </div>
 
     <!-- wallet / checkout / play-safe sheet -->
@@ -1205,6 +1210,37 @@
                 <button class="big go" onclick="openWallet()">BACK TO WALLET</button>`);
         }
 
+        // menu: everything that isn't needed to play a round
+        async function openMenu() {
+            try { await loadWallet() } catch { }
+            showPanel(`
+                <div class="row"><h2>☰ Menu</h2><button class="ghost" style="width:auto" onclick="closePanel()">✕</button></div>
+                <button class="opt" onclick="openWallet()">👛 Wallet: free points, top-up, ticket</button>
+                <button class="opt" onclick="openProfile()">🐱 Profile &amp; cashier code</button>
+                <button class="opt" onclick="openSafe()">🛟 Safe play: limits, breaks, self-exclusion</button>
+                <button class="opt" onclick="openHowTo()">❓ How to play</button>
+                ${WAL && WAL.demo_mode ? '<button class="opt" onclick="openDemoReset()">🔄 New demo player</button>' : ""}
+                <button class="ghost" onclick="closePanel()">Back to the game</button>`);
+        }
+        function openHowTo() {
+            showPanel(`
+                <div class="row"><h2>❓ How to play</h2><button class="ghost" style="width:auto" onclick="openMenu()">✕</button></div>
+                <div class="kv"><span>1. While betting is open, pick a bet and tap BET.</span></div>
+                <div class="kv"><span>2. The cat on the big screen starts walking and the multiplier climbs.</span></div>
+                <div class="kv"><span>3. Tap CASH OUT before the cat gets distracted. You win bet × multiplier.</span></div>
+                <div class="kv"><span>4. If the cat gets distracted first, the bet is lost.</span></div>
+                <div class="kv"><span>5. Each season changes one rule. Watch the forecast while betting.</span></div>
+                <div class="dim">Points are not money and can't be cashed out. Take breaks.</div>
+                <button class="big go" onclick="closePanel()">GOT IT</button>`);
+        }
+        function openDemoReset() {
+            showPanel(`
+                <h2>🔄 New demo player</h2>
+                <div class="dim">Start over with a fresh wallet and the starting points. Your old wallet stays on the server.</div>
+                <button class="big go" onclick="localStorage.removeItem('kc_pid'); location.reload()">START OVER</button>
+                <button class="ghost" onclick="openMenu()">Cancel</button>`);
+        }
+
         // profile + signed single-use cashier code
         const AVATAR_ICON = { ginger: "🟠", black: "⚫", white: "⚪", grey: "🔘", calico: "🟤", tabby: "🟡" };
         let qrTimer = null;
@@ -1349,7 +1385,7 @@
 
         $("walletBtn").onclick = openWallet;
         $("bal").onclick = openWallet;
-        $("safeBtn").onclick = openSafe;
+        $("menuBtn").onclick = openMenu;
         $("sheet").onclick = e => { if (e.target.id === "sheet") closePanel(); };
         if (pid) startRealityCheck();
         else $("joinBtn").addEventListener("click", () => setTimeout(() => { if (pid) startRealityCheck(); }, 800));
