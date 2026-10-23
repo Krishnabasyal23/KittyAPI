@@ -17,7 +17,6 @@ from fastapi import (
     Request,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, ConfigDict
@@ -160,7 +159,6 @@ app.add_middleware(
 )
 
 app.middleware("http")(public_guard)
-app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # The web build of the game (Unity WebGL, see Kitty Crash > Build > WebGL), served from the same address as the API
 # so the page talks to the server it came from. Absent until a build is copied here.
