@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from database.connection import initialize_database
 from database.migrate import status as migration_status
 from database.wallet_store import WalletStore
+from crash_engine import HOUSE_EDGE_PCT
 from economy import MAX_BET, MIN_BET
 from lottery import lottery_validator
 from payments import CashierProvider, demo_mode, payment_provider
@@ -212,6 +213,8 @@ def health():
         "version": VERSION,
         "rng_mode": GAME_RNG_MODE,
         "bonus_pct": bonus_percents(),
+        "house_edge_pct": HOUSE_EDGE_PCT,
+        "rtp_pct": 100 - HOUSE_EDGE_PCT,
         "happy_hour": happy_hour(),
         "promo": HAPPY_HOUR_LABEL if happy_hour() else None,
         "min_bet": str(MIN_BET),

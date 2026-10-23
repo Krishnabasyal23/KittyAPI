@@ -5,6 +5,10 @@ All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangel
 ## [Unreleased]
 
 ### Added
+- The house edge in the open: `/api/health` and the crowd state publish `house_edge_pct` (4) and `rtp_pct` (96), and the phone Rules
+  sheet (English and French) says how much the house keeps and that every cash-out target has the same return.
+- Public launchers and host configs now turn the simulated checkout on (`DEMO_MODE=1` with `ALLOW_PUBLIC_DEMO=1`): the wallet's card /
+  wallet top-up is back on the public demo, still labelled as simulated with no real money.
 - `/play` serves the Unity WebGL build of the game from `web/play`, on the same address as the API (served uncompressed with a Content-Length so the browser can cache the data file).
   `GET /api/crowd/join-info` gives the join address and QR code without taking the host seat.
 - Auto host (`AUTO_HOST=1`, `autohost.py`): a house table that runs by itself. The server's own wallet ("House Cat") takes the host
