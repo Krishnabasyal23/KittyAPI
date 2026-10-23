@@ -163,6 +163,26 @@ app.middleware("http")(public_guard)
 # The web build of the game (Unity WebGL, see Kitty Crash > Build > WebGL), served from the same address as the API
 # so the page talks to the server it came from. Absent until a build is copied here.
 PLAY_DIR = Path(os.getenv("PLAY_DIR") or Path(__file__).resolve().parent / "web" / "play")
+
+# Unity's page puts the game in a small box; this makes it fill the browser window on a dark background.
+PLAY_PAGE_CSS = (
+    "<style>html,body{margin:0!important;height:100%;background:#14131f!important;overflow:hidden}"
+    "#unity-container{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;transform:none!important}"
+    "#unity-fullscreen-container{width:100%!important;height:100%!important}"
+    "#unity-canvas{width:100%!important;height:100%!important;display:block}"
+    "#unity-footer{display:none!important}</style>"
+)
+
+
+@app.get("/play/", response_class=HTMLResponse, include_in_schema=False)
+def play_page():
+    page = PLAY_DIR / "index.html"
+    if not page.is_file():
+        raise HTTPException(status_code=404, detail="The web game has not been built on this server")
+    html = page.read_text(encoding="utf-8").replace("</head>", PLAY_PAGE_CSS + "</head>", 1)
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+
+
 if (PLAY_DIR / "index.html").is_file():
     app.mount("/play", StaticFiles(directory=PLAY_DIR, html=True), name="play")
 
