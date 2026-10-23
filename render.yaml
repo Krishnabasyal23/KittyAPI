@@ -5,6 +5,7 @@ services:
   - type: web
     name: catino
     runtime: docker
+    branch: develop-v2
     plan: free
     healthCheckPath: /api/health
     # disk:
