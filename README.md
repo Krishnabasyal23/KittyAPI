@@ -39,6 +39,13 @@ code never opens.
 | `QR_SECRET` | random per start | Key that signs the cashier QR codes. Unset: a new random key at each start, so open codes die on restart (they only last 5 minutes anyway). |
 | `KITTY_TEST_TMP` | `<project>/.tmp` | Where tests and scripts put their throwaway databases and logs. |
 
+## The odds (house edge)
+
+The house edge is **4%** (`HOUSE_EDGE` in `crash_engine.py`): the crash point is `clamp(0.96 / u, 1, 100)`, so the chance a round
+reaches x is `0.96 / x` and every cash-out target returns 96% on average (median crash 1.92x, about 4% crash instantly at 1.00x).
+Season bonuses are capped at +4%, so no strategy returns 100% or more. `/api/health` and the crowd state publish
+`house_edge_pct` and `rtp_pct`; the phone Rules sheet, the game's RULES page and the landing page show them in plain words.
+
 ## Online
 
 `PUBLIC_MODE=1` plus a tunnel, a container host or a VM puts the phone page and the join QR on a public https

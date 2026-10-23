@@ -1,19 +1,24 @@
-# Render blueprint. The database needs a persistent disk, which is a paid Render feature;
-# without it the wallets reset whenever the service restarts (fine for a short demo).
+# Render blueprint (Docker). This is the free setup: no card needed, but a free service sleeps after about 15 minutes
+# without visitors (the first request wakes it in under a minute) and the database is wiped when it restarts, so wallets
+# reset. Fine for a demo. For wallets that survive, change `plan` to starter and uncomment the disk block (paid).
 services:
   - type: web
     name: catino
     runtime: docker
-    plan: starter
+    plan: free
     healthCheckPath: /api/health
-    disk:
-      name: catino-data
-      mountPath: /data
-      sizeGB: 1
+    # disk:
+    #   name: catino-data
+    #   mountPath: /data
+    #   sizeGB: 1
     envVars:
       - key: PUBLIC_MODE
         value: "1"
       - key: AUTO_HOST
+        value: "1"
+      - key: DEMO_MODE
+        value: "1"
+      - key: ALLOW_PUBLIC_DEMO
         value: "1"
       - key: KITTY_DB_PATH
         value: /data/catino-v2.db

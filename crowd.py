@@ -15,7 +15,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
-from crash_engine import SEASON_GROWTH, MIN_CRASH_SECONDS, multiplier_at
+from crash_engine import HOUSE_EDGE_PCT, SEASON_GROWTH, MIN_CRASH_SECONDS, multiplier_at
 from economy import MIN_BET, MAX_BET, calculate_cashout, validate_points
 from errors import WalletError
 from fairness import NotRevealedYet
@@ -342,6 +342,7 @@ class CrowdTable:
                 "leaf_storm": False,
                 "cocoa_line": COCOA_LINE,
                 "bonus_pct": bonus_percents(),   # phones label bonuses with what the server really pays
+                "house_edge_pct": HOUSE_EDGE_PCT,   # and show the house edge in the rules
             }
             if self.phase == "betting":
                 # live: if the game screen changes next walk's season (key N), phones see it at once

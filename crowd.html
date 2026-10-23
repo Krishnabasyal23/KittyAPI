@@ -670,6 +670,7 @@
         const SEASON_ICON = { spring: "🌸", summer: "☀️", fall: "🍂", winter: "❄️" };
         const BONUS_ICON = { butterfly: "🦋", cocoa: "☕" };
         // bonus size comes from the server (season_rules.bonus_factors); blank if an older server does not say
+        function edge() { return s && s.house_edge_pct != null ? s.house_edge_pct : 4; }
         function pct(kind) { const v = s && s.bonus_pct ? s.bonus_pct[kind] : null; return v == null ? "" : "+" + v + "%"; }
         let lastButterfly = false;
 
@@ -694,6 +695,7 @@
                 "h.3": "3. Tap CASH OUT before the cat gets distracted. You win bet × multiplier.",
                 "h.4": "4. If the cat gets distracted first, the bet is lost.",
                 "h.5": "5. Each season changes one rule. Watch the forecast while betting.",
+                "h.6": "6. The house edge is {0}%: over many rounds the game pays back about {1}% of all points bet, and every cash-out target has the same {1}% return. Season bonuses are capped so no strategy beats 100%. Open Schrödinger's Box to check any round.",
                 "h.points": "Points are not money and can't be cashed out. Take breaks.", "h.ok": "GOT IT",
                 "s.title": "🛟 Safe play", "s.points": "Catino is a game. Points have no cash value and can't be cashed out.",
                 "s.1": "Decide how long you'll play before you start, and stop when the time is up.",
@@ -732,6 +734,7 @@
                 "h.3": "3. Touchez ENCAISSER avant que le chat soit distrait. Vous gagnez mise × multiplicateur.",
                 "h.4": "4. Si le chat est distrait avant, la mise est perdue.",
                 "h.5": "5. Chaque saison change une règle. Regardez la prévision pendant les mises.",
+                "h.6": "6. L'avantage de la maison est de {0} % : sur de nombreuses manches, le jeu rend environ {1} % de tous les points misés, et chaque cible d'encaissement a le même rendement de {1} %. Les bonus de saison sont plafonnés : aucune stratégie ne dépasse 100 %. Ouvrez la boîte de Schrödinger pour vérifier n'importe quelle manche.",
                 "h.points": "Les points ne sont pas de l'argent et ne s'encaissent pas. Prenez des pauses.", "h.ok": "COMPRIS",
                 "s.title": "🛟 Jeu responsable", "s.points": "Catino est un jeu. Les points n'ont aucune valeur en argent et ne s'encaissent pas.",
                 "s.1": "Décidez combien de temps vous jouerez avant de commencer, et arrêtez quand le temps est écoulé.",
@@ -1534,6 +1537,7 @@
             showPanel(`
                 <div class="row"><h2>${tr("h.title")}</h2><button class="ghost" style="width:auto" onclick="openMenu()">✕</button></div>
                 ${[1, 2, 3, 4, 5].map(i => `<div class="kv"><span>${tr("h." + i)}</span></div>`).join("")}
+                <div class="kv"><span>${tr("h.6", edge(), 100 - edge())}</span></div>
                 <div class="dim">${tr("h.points")}</div>
                 <button class="big go" onclick="closePanel()">${tr("h.ok")}</button>`);
         }

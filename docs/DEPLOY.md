@@ -7,7 +7,7 @@ join QR a public https address, from quickest to most permanent.
 - closes `/cashier`, `/operator` and the demo helpers completely (a tunnel forwards from 127.0.0.1, so "local" proves nothing);
 - lets only the game on the server computer take the crowd host seat;
 - turns on per-visitor rate limits (wallet creation, join, bets, seeds), a request size cap and a WebSocket limit;
-- keeps simulated purchases off unless you also set `DEMO_MODE=1` **and** `ALLOW_PUBLIC_DEMO=1`.
+- keeps simulated purchases (the wallet's card / wallet checkout, labelled as simulated, no real money) off unless you also set `DEMO_MODE=1` **and** `ALLOW_PUBLIC_DEMO=1`. `start_public.bat`, the Dockerfile, `render.yaml` and `fly.toml` set both for the demo; remove them to hide the checkout.
 
 Run **one** worker. The crowd table and the rounds live in memory.
 

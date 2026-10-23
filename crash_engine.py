@@ -4,6 +4,7 @@ import secrets
 from randomness import generate_random
 
 HOUSE_EDGE = 0.04
+HOUSE_EDGE_PCT = int(round(HOUSE_EDGE * 100))      # shown to players: the game pays back 100 - this on average
 MAX_MULTIPLIER = 100.0
 
 # Retained for compatibility with old standalone math tests.
