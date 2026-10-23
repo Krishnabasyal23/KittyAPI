@@ -5,6 +5,7 @@ All notable changes to KittyAPI. Format: [Keep a Changelog](https://keepachangel
 ## [Unreleased]
 
 ### Added
+- The new Catino wordmark and favicon on the phone page; the committed web build (`web/play`) is rebuilt with the new in-game logos.
 - The web build (`web/play`, 65 MB) is now committed so a hosted server serves the game at `/play`. `render.yaml` is the free Render setup.
 - The house edge in the open: `/api/health` and the crowd state publish `house_edge_pct` (4) and `rtp_pct` (96), and the phone Rules
   sheet (English and French) says how much the house keeps and that every cash-out target has the same return.
