@@ -17,13 +17,13 @@ Run **one** worker. The crowd table and the rounds live in memory.
 
 The server also serves the game itself (Unity WebGL build) at `<address>/play`, on the same address as the API, so the page
 talks to the server it came from and needs no setup. Build it once on the PC with Unity: **Kitty Crash > Build > WebGL for the
-server (/play)** (or the command line in `WebGlBuild.cs`). It writes `KittyAPI/web/play`, which is not committed (it is large).
+server (/play)** (or the command line in `WebGlBuild.cs`). It writes `KittyAPI/web/play`. The build is **committed** (65 MB) so a hosted server (Render, Fly) can serve the game; rebuild and commit
+only when the game changes, because each rebuild adds about 65 MB to the repository's history.
 Restart the server after a new build. Without a build `/play` simply does not exist.
 
 In the web game the Crowd screen (key C) shows where phones join, because only a game on the server computer can host; the house
 table (`AUTO_HOST=1`) is what phones play on. The web game itself is a normal online game with its own wallet.
-For a container host the `web/play` folder must be in the image: deploy from your folder (`fly deploy`), or remove `web/` from
-`.gitignore` and commit the build.
+A container host builds from the repository, so the committed `web/play` ends up in the image.
 
 ## 1. Your PC plus a tunnel (about 10 minutes, free)
 
