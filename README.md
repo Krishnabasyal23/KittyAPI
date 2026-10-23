@@ -203,3 +203,7 @@ or add `D:\Anaconda\envs\hackathon\Library\bin` to `PATH`.
 ## Credits
 
 See the Catino README for credits.
+
+## License
+
+[MIT](LICENSE).
